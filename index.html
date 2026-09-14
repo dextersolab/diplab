@@ -332,7 +332,7 @@ function drawChart(R){
     }
     // arrow tip (kept INSIDE box; pointing along last segment down)
     var tip=pts[pts.length-1], prev=pts[pts.length-2];
-    var ang=Math.atan2(tip[1]-prev[1], tip[0]-prev[0])*180/Math.PI;
+    var ang=Math.atan2(tip[1]-prev[1], tip[0]-prev[0])*180/Math.PI - 90;
     H+='<div style="position:absolute;left:'+tip[0]+'%;top:'+tip[1]+'%;transform:translate(-50%,-50%) rotate('+ang+'deg);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:12px solid #2b3f5c"></div>';
     // scenario label above-left of tip, inside box
     var dropPct=Math.round((1-floorRel)*100);
@@ -383,12 +383,20 @@ function render(R){show('result');
   /* chart */
   document.getElementById('plot').innerHTML=drawChart(R);
   /* score */
+  var noRead = (R.score==null) && (!(R.levels||[]).length) && (!(R.whales||[]).length);
   var band=R.band||'OK', bandCols={CLEAN:'#3fae7a',OK:'#e0a94c',RISKY:'#e0736b',DANGER:'#e0736b'},bc=bandCols[band]||'#5b7799';
-  document.getElementById('r_score').textContent=R.score!=null?R.score:'-';
-  var be=document.getElementById('r_band');be.textContent=band;be.style.color=bc;
-  document.getElementById('r_score').style.color=bc;
-  var bl='';for(var i=0;i<20;i++){bl+='<div style="background:'+(i<Math.round((R.score||0)/5)?bc:'#f7fbfe')+'"></div>';}
-  document.getElementById('r_blocks').innerHTML=bl;
+  if(noRead){
+    document.getElementById('r_score').textContent='--';
+    document.getElementById('r_score').style.color='#9db4cc';
+    var beN=document.getElementById('r_band');beN.textContent='NO READ';beN.style.color='#9db4cc';
+    document.getElementById('r_blocks').innerHTML='<div style="grid-column:1/-1;font-size:12px;line-height:1.5;color:#5b7799;padding:2px 0">on-chain read unavailable for this token - it is not a Pons v2 launch, or it is too old to read in the on-chain window. market data (price, chart, FDV) below is still live.</div>';
+  } else {
+    document.getElementById('r_score').textContent=R.score!=null?R.score:'-';
+    var be=document.getElementById('r_band');be.textContent=band;be.style.color=bc;
+    document.getElementById('r_score').style.color=bc;
+    var bl='';for(var i=0;i<20;i++){bl+='<div style="background:'+(i<Math.round((R.score||0)/5)?bc:'#f7fbfe')+'"></div>';}
+    document.getElementById('r_blocks').innerHTML=bl;
+  }
   /* stats */
   function sv(c){return 'font-family:\'Press Start 2P\',monospace;font-size:12px;color:'+(c||'#2b3f5c')+'';}
   var st=[['bundle %',(R.bundle_pct||0).toFixed(1)+'%','#e0a94c'],['top-10 concentration',(R.top10_pct||0).toFixed(1)+'%','#e0a94c'],['exit-below-price %',(R.exit_below_pct||0).toFixed(1)+'%','#e0736b'],['readable whales',(R.readable||0)+' / '+(R.holders_seen||0),''],['FDV',fmtUsd(m.fdv_usd||0),''],['liquidity',fmtUsd(m.reserve_usd||0),''],['24h volume',fmtUsd(m.volume_24h||0),''],['age',(m.age_h||0).toFixed(1)+'h','']];
@@ -402,8 +410,13 @@ function render(R){show('result');
   var exits=(R.levels||[]).filter(function(l){return l.rel<1;}).sort(function(a,b){return b.rel-a.rel;});
   var nearest=exits[0], floor=exits[exits.length-1];
   var below=(R.exit_below_pct||0).toFixed(1);
-  var vtxt=below+'% of supply sits in whales who habitually exit below current price - sell pressure under you.';
-  if(exits.length>=2)vtxt+=' Two walls at '+exits[0].rel.toFixed(2)+'x and '+exits[1].rel.toFixed(2)+'x carry most of it.';
+  var vtxt;
+  if(noRead || !exits.length){
+    vtxt='no readable whales for this token yet - the exit map needs on-chain holder history, which is not available here. the price chart above is live.';
+  } else {
+    vtxt=below+'% of supply sits in whales who habitually exit below current price - sell pressure under you.';
+    if(exits.length>=2)vtxt+=' Two walls at '+exits[0].rel.toFixed(2)+'x and '+exits[1].rel.toFixed(2)+'x carry most of it.';
+  }
   document.getElementById('r_verdict').innerHTML=vtxt.replace('below','<strong>below</strong>');
   document.getElementById('r_sp').textContent=below+'% supply';
   document.getElementById('r_nw').textContent=nearest?(nearest.rel.toFixed(2)+'x - $'+(nearest.rel*m.price_usd).toFixed(m.price_usd<0.001?6:5)):'-';
