@@ -49,6 +49,28 @@ def fetch_market(token):
 CACHE = {}                 # token -> (ts, dict)  готовый результат
 JOBS = {}                  # token -> {"status": "pending"|"done"|"error", "data"/"error", "ts"}
 RECENT = []                # последние проверки: {token,pair,score,band,ts}
+SCANNED_FILE = os.path.join(os.path.dirname(__file__), "scanned_count.txt")
+_scanned_seen = set()      # уникальные токены за жизнь процесса
+
+def _read_scanned():
+    try:
+        with open(SCANNED_FILE) as f:
+            return int(f.read().strip() or 0)
+    except Exception:
+        return 0
+
+def _bump_scanned(token):
+    """Считаем уникальные токены. +1 к файлу только на первый анализ токена."""
+    with _lock:
+        if token in _scanned_seen:
+            return
+        _scanned_seen.add(token)
+        n = _read_scanned() + 1
+        try:
+            with open(SCANNED_FILE, "w") as f:
+                f.write(str(n))
+        except Exception:
+            pass
 CACHE_TTL = 300            # 5 min
 _lock = threading.Lock()
 
@@ -82,6 +104,7 @@ def run_cached(token):
         RECENT.insert(0, {"token": token, "pair": d.get("market", {}).get("pair"),
                           "score": d.get("score"), "band": d.get("band"), "ts": int(now)})
         del RECENT[30:]                                             # держим 30
+    _bump_scanned(token)
     return d, False
 
 def _run_job(token):
@@ -127,7 +150,9 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, json.dumps({"ok": True}))
         if u.path == "/api/recent":
             with _lock:
-                return self._send(200, json.dumps({"recent": list(RECENT)}))
+                return self._send(200, json.dumps({"recent": list(RECENT), "scanned": _read_scanned()}))
+        if u.path == "/api/stats":
+            return self._send(200, json.dumps({"scanned": _read_scanned()}))
         if u.path in ("/api/analyze", "/api/result"):
             q = parse_qs(u.query)
             token = (q.get("token") or [""])[0]
