@@ -73,28 +73,33 @@ RPC endpoint lives in an environment variable and is never committed.
 
 ## Roadmap
 
-**LIVE**
-- exit-level map from real whale trade history
-- bundle detection and exit-risk score
-- works on both curve and migrated V4 tokens
+**◆ SHIPPING NOW**
+> quick wins on top of the live engine.
+- deeper scans - read the top 50 holders, not just the top 10
+- priority lane - your scan runs first, no queue
+- scan history - save your checks and come back to them
+- export - take any result out as an image or CSV
 
-**IN PROGRESS** *(shipping this week)*
-- the dashboard: token score, holder stats, whale breakdown
-- psychological levels (round market-cap walls)
-- faster scans and habit caching
+**◆ NEXT**
+> from a tool into a terminal.
+- Telegram bot - the same read from a contract address, in chat
+- whale alerts - get pinged when a tracked whale enters or dumps a token
+- watchlists - follow the tokens and the wallets you care about
+- wallet profiler - paste a wallet, not a token: its habit, its average
+  exit multiple, how smart the money really is
 
-**NEXT** *(this month)*
-- $DIPLAB token and holder perks
-- live feed of scanned tokens
-- alerts and watchlists
-- an API for builders
+**◆ THE LAB**
+> the long build - where DIPLAB becomes a live edge.
+- live whale radar - a constant scan of the whole chain: "wallet X just
+  entered token Y" as it happens, not on request
+- smart-money index - every whale on the chain ranked by real profit, and
+  what they are moving into right now
+- predictive alerts - not "a whale exited" after the fact, but "by their
+  habits, this token is near its exit wall" before the dump
+- track record - a public log of the calls DIPLAB made and how they played out
 
-## $DIPLAB
-
-$DIPLAB - soon. Holders get deeper scans, premium features and priority
-analysis.
-
-A burn mechanic ties the token to real usage.
+> the vision: the pre-trade check every Robinhood memecoin trader runs first -
+> and the radar that shows where smart money moves next.
 
 ## Credits
 
