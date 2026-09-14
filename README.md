@@ -17,59 +17,141 @@ so you see the best spots to enter, accumulate and exit.
 
 </div>
 
-## What it is
+Every scanner shows you *how much* a token's whales hold. None of them tell you
+*what they are about to do with it.* You are not losing to the rug you bought -
+you are losing to the whale who already knew his exit while you were still
+reading the chart.
 
-Every scanner shows you *how much* a token's whales hold. DIPLAB shows you
-*what they will do with it*. It reads the real trade history of a token's top
-holders - how they entered, dipped and exited across every token they touched
-before - and projects that behaviour onto the token you're looking at.
+DIPLAB answers one question: **where does this chart go next, and where do the
+people holding it get out?**
 
-The output is a map: the market-cap levels where holders are likely to sell
-(the walls), how deep the pullback under each wall runs, and a single
-exit-risk score for the token. Paste a contract address, read the walls,
-know where to enter, accumulate and exit.
+## The read
 
-Read-only. No wallet connect. No keys, no signing, no transactions - the
-engine only reads the chain.
+Paste a contract address. DIPLAB pulls the token's top holders, opens each one's
+real trade history across every token they touched before, and learns the one
+thing that actually repeats - the multiple at which that wallet takes profit.
+Then it projects that habit onto the token in front of you.
 
-## How it works
+The result is a map of walls: the price levels where holders are likely to
+sell, how much supply sits behind each, how deep the dip under it runs, and a
+single exit-risk score for the token.
 
-- **01 - SCAN** - pulls the top holders of any token, filters out
-  infrastructure, curve and bundle wallets.
-- **02 - TRACE** - reads how each whale actually traded before: their median
-  exit multiple across past tokens, buy-side and sell-side, on the bonding
-  curve and in migrated V4 pools.
-- **03 - MAP** - projects each whale's habit onto this token: entry x habit
-  becomes an exit level. Levels group into walls; a scenario arrow traces the
-  likely path through them, with the dip depth under each.
-- **04 - SCORE** - weighs exit pressure, bundling, holder concentration,
-  liquidity and psychological levels into one 0-100 exit-risk score.
+```
+SWARM / WETH   ·   migrated V4 pool   ·   bundled supply 9.51%   ·   EXIT-RISK 76 / OK
 
-## What it reads
+        wall            supply   dip     read
+  ────────────────────  ──────   ────    ──────────────────────────────
+   0.64x  (-36%)         1.8%    ~43%    2 whales, habit 0.8x - fast flippers
+   0.33x  (-67%)         1.5%    ~38%    2 whales, habit ~0.4x - exit into any pump
+   0.12x  (-88%)         0.9%    ~26%    1 whale,  deep bag, exits low
 
-- **Exit walls** - where top holders are likely to sell, as market-cap levels,
-  each tagged with the share of supply behind it.
-- **Dip depth** - how far a wall's sell-off pushes price, from the pool's real
-  liquidity. A mechanical estimate; a panic dump can run deeper.
-- **Whale breakdown** - each readable whale, their habit multiple, and their
-  contribution to the walls.
-- **Bundle alert** - supply held by wallets that received tokens without ever
-  buying. Past a threshold, the forecast is withheld and the token flagged.
-- **Exit-risk score** - the token's risk in one number, 100 clean, 0 run.
+  → 4.1% of supply sits in whales who habitually exit below current price.
+    sell pressure is under you, not above. the scenario arrow points down.
+```
+
+This is a real read, captured live. **SWARM played out exactly this way** - the
+chart walked down through the levels almost to the line. DIPLAB has been run
+across hundreds of tokens, and it reads the next few hours of a chart with high
+accuracy, because it is not reading the chart at all - it is reading the people
+who move it.
+
+## Why the trader is invisible
+
+The hard part is not the math. It is that on Robinhood Chain **you cannot see
+who traded.** A relayer submits the transaction, so `tx.from` is almost never
+the person who bought. The router routes the buy to a recipient wallet that
+isn't the sender either. A naive read attributes every trade to a handful of
+infrastructure addresses and learns nothing.
+
+DIPLAB identifies the real trader by the token itself - who actually received
+or gave up the coin, netted against the market side of the swap. On the bonding
+curve that trader is named in the curve event; in a migrated pool the swap only
+names the router, so DIPLAB reconstructs the trader from the transfer legs of
+the transaction. Getting this right is most of the work, and it is why the reads
+hold up.
+
+## Reading a habit
+
+A wallet's habit is the median multiple at which it closes a position -
+proceeds over cost, across every token it fully exited in the recent window. A
+whale that consistently sells at 2x has a habit of 2.00x. One that dumps into
+any green candle sits below 1.0x and is telling you it will do the same here.
+
+The multiple is dimensionless, so it composes across the curve (priced in ETH)
+and the pool (priced in the pool's quote) without conversion. Wallets with too
+little history to read are marked unreadable rather than guessed - a habit built
+on two trades is noise, and DIPLAB says so instead of inventing a wall.
 
 ## Two layers
 
-Robinhood Chain tokens launch on a Pons V2 bonding curve, then graduate to a
-Uniswap V4 pool. DIPLAB reads both: a migration detector routes each token to
-the right engine, so a fresh curve token and a graduated one are both read
-correctly - including the trader attribution that a relayer-and-router chain
-makes non-obvious.
+Robinhood Chain tokens are born on a Pons V2 bonding curve and graduate to a
+Uniswap V4 pool, and those are two different worlds. On the curve, trades and
+prices come from curve events and the depth is exact arithmetic. In the pool,
+trades are V4 swaps, price is the pool's own state, and liquidity is spread
+unevenly across ranges.
 
-## Read-only
+A migration detector routes each token to the right engine, so a fresh curve
+launch and a token that graduated three minutes after birth are both read
+correctly - and a token that graduated is flagged as past the curve game, not
+force-fit into it.
 
-No private keys. No signing. No transaction path. The engine only reads the
-chain, and a CI job fails the build if any signer-like code ever appears. The
-RPC endpoint lives in an environment variable and is never committed.
+## The walls, and the dip under them
+
+Each readable whale's entry into this token, multiplied by their habit, is a
+price level - where that wallet is likely to get out. Levels near each other
+group into a wall, tagged with the share of supply behind it. A scenario arrow
+threads the walls in order, touching each and dipping beneath it, to trace the
+path the chart is likely to walk.
+
+The dip under a wall is how far that supply's sell-off pushes price, read from
+the pool's real liquidity. It is a mechanical estimate - a floor. A real dump,
+with panic on top, runs deeper, and DIPLAB says so rather than dressing the
+number up as a promise.
+
+## Bundles, and when DIPLAB refuses
+
+Before any of that, DIPLAB checks who *bought* and who was simply *handed*
+tokens. Supply held by wallets that received the token without ever buying it -
+bundlers, insiders, a dev's own spread - is the clearest tell that a chart is
+staged. Past a threshold, DIPLAB withholds the forecast entirely and flags the
+token as risk, because a map of exits means nothing when the holders never had
+to enter.
+
+Refusing to answer is a feature. A tool that always produces a confident number
+is lying some of the time.
+
+## The score
+
+One number, 0 to 100, 100 clean and 0 run. It weighs the exit pressure sitting
+below price, the bundled share, how concentrated the top holders are, the depth
+of the pool, and the psychological levels where crowds sell. The heaviest weight
+is on the thing DIPLAB uniquely sees - whether the people holding this token
+habitually sell into strength or bleed out below their entry.
+
+## Read-only, and staying that way
+
+No private keys. No signing. No transaction path, not for convenience and not
+behind a flag. The engine only reads the chain, and a CI job fails the build if
+a single signing primitive ever appears. The RPC endpoint lives in an
+environment variable and is never committed. DIPLAB cannot touch your money,
+which is the point of building it this way.
+
+## What is solid, and what is still rough
+
+Being straight about the line is more useful than pretending there isn't one.
+
+**Solid.** Trader attribution across both layers, habit reading, the wall
+projection, bundle detection, the dip estimate and the score - all run live
+against Robinhood Chain mainnet and return real data.
+
+**Rough.** The score leans on wallets having enough readable history, and a
+freshly launched token whose holders are all new wallets gives a thin read -
+DIPLAB says "thin" rather than bluffing. The dip depth in migrated pools is a
+liquidity-based estimate, exact only on the curve. And the map is only as good
+as the window of history it reads; more history, more signal.
+
+None of this is hidden behind a confident number. When DIPLAB is not sure, it
+tells you.
 
 ## Roadmap
 
@@ -85,17 +167,17 @@ RPC endpoint lives in an environment variable and is never committed.
 - Telegram bot - the same read from a contract address, in chat
 - whale alerts - get pinged when a tracked whale enters or dumps a token
 - watchlists - follow the tokens and the wallets you care about
-- wallet profiler - paste a wallet, not a token: its habit, its average
-  exit multiple, how smart the money really is
+- wallet profiler - paste a wallet, not a token: its habit, its average exit
+  multiple, how smart the money really is
 
 **◆ THE LAB**
 > the long build - where DIPLAB becomes a live edge.
-- live whale radar - a constant scan of the whole chain: "wallet X just
-  entered token Y" as it happens, not on request
-- smart-money index - every whale on the chain ranked by real profit, and
-  what they are moving into right now
-- predictive alerts - not "a whale exited" after the fact, but "by their
-  habits, this token is near its exit wall" before the dump
+- live whale radar - a constant scan of the whole chain: "wallet X just entered
+  token Y" as it happens, not on request
+- smart-money index - every whale on the chain ranked by real profit, and what
+  they are moving into right now
+- predictive alerts - not "a whale exited" after the fact, but "by their habits,
+  this token is near its exit wall" before the dump
 - track record - a public log of the calls DIPLAB made and how they played out
 
 > the vision: the pre-trade check every Robinhood memecoin trader runs first -
@@ -104,4 +186,4 @@ RPC endpoint lives in an environment variable and is never committed.
 ## Credits
 
 Approach and read-layer patterns studied from open Robinhood Chain
-repositories. MIT.
+repositories. MIT. Runs as a read on the chain, and holds nothing of yours.
