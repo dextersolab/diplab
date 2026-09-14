@@ -19,7 +19,7 @@ MIN_POSITIONS = 5
 BUNDLE_ALERT_PCT = 10.0
 GROUP_WIDTH = 1.25
 TOP_HOLDERS = 10
-MAX_TRADES = 30      # последних сделок на кошелёк — хватает для паттерна
+MAX_TRADES = 60      # последних сделок на кошелёк — шире сэмпл, ловим завершённые позиции у активных ветеранов
 TARGET_READABLE = 8  # добираем холдеров, пока не наберём столько читаемых
 MAX_SCAN = 30        # но не сканируем больше стольких холдеров
 WORKERS = 20
@@ -29,6 +29,22 @@ Q96 = 2 ** 96
 
 def _signed(x):
     return x - (1 << 256) if x >= (1 << 255) else x
+
+
+def _tail_logs(bn, topics, need=MAX_TRADES, floor_blocks=WINDOW, step=60_000):
+    """Последние ~need логов по фильтру, идём окнами С КОНЦА. Не тащим всю историю:
+    для кошелька-гиганта (миллионы переводов) get_logs за всё окно возвращал бы
+    миллионы логов только чтобы взять последние 30 — вместо этого сканируем узкими
+    окнами от текущего блока назад и останавливаемся, как только набрали need."""
+    out = []; hi = bn; floor = bn - floor_blocks; st = step
+    while hi > floor:
+        lo = max(hi - st, floor)
+        chunk = ch.get_logs(lo, hi, topics=topics)
+        out = chunk + out                       # более старые логи идут впереди
+        if len(out) >= need:
+            break
+        hi = lo - 1; st = min(st * 2, 500_000)  # окно пустое/редкое — расширяем шаг
+    return out[-need:]
 
 
 WETH_ADDR = "0x0bd7d308f8e1639fab988df18a8011f41eacad73"
@@ -197,8 +213,10 @@ def _habit_compute(bn, holder, skip_token):
             d = lg["data"]; k = ("c", lg["address"].lower())
             pos[k]["ti"] += ch.u256(d, 0); pos[k]["qo"] += ch.u256(d, 1)
     # --- V4: последние MAX_TRADES переводов, чеки одним батчем ---
-    tin = ch.get_logs(frm, bn, topics=[ch.TRANSFER_TOPIC, None, wt])[-MAX_TRADES:]
-    tout = ch.get_logs(frm, bn, topics=[ch.TRANSFER_TOPIC, wt, None])[-MAX_TRADES:]
+    # tail_logs берёт хвост окнами с конца (иначе для кошелька-гиганта get_logs
+    # тащил бы миллионы логов только ради последних MAX_TRADES).
+    tin = _tail_logs(bn, [ch.TRANSFER_TOPIC, None, wt], MAX_TRADES)
+    tout = _tail_logs(bn, [ch.TRANSFER_TOPIC, wt, None], MAX_TRADES)
     items = [(lg["address"].lower(), lg["transactionHash"], "in", int(lg["data"], 16)) for lg in tin if len(lg["data"]) > 2]
     items += [(lg["address"].lower(), lg["transactionHash"], "out", int(lg["data"], 16)) for lg in tout if len(lg["data"]) > 2]
     items = [it for it in items if it[0] != skip_token]
@@ -232,11 +250,22 @@ def _habit_compute(bn, holder, skip_token):
 def analyze(token: str) -> Result:
     token = token.lower(); bn = ch.block_number()
     curve, lblock = _find_launch(bn, token)
-    if not curve:
-        return Result(token, "unknown", False, 0.0, alert="launch not found — not a Pons v2 token, or too old to read in window")
-    migrated = bool(ch.get_logs(lblock, bn, address=curve, topics=[CURVE_COMPLETED]))
+    fallback = curve is None
+    if fallback:
+        # Нет Pons-launch в окне (не Pons-кривая, другой quote, или старше окна).
+        # НЕ сдаёмся: холдеры берутся из Pons Portal API (launch не нужен), а привычки
+        # китов — из кросс-токенной истории самих кошельков. Теряем только точный
+        # блок запуска (берём окно WINDOW) и статус миграции/адрес кривой.
+        lblock = bn - WINDOW
+        migrated = False
+    else:
+        migrated = bool(ch.get_logs(lblock, bn, address=curve, topics=[CURVE_COMPLETED]))
     TS = int(ch.rpc("eth_call", [{"to": token, "data": "0x18160ddd"}, "latest"]), 16)
     all_holders = _holders(bn, token, curve, lblock)[:MAX_SCAN]
+    if not all_holders:
+        # реально нечего читать: и API пуст, и переводов в окне нет
+        return Result(token, "unknown", False, 0.0,
+                      alert="no holders readable — token not indexed and no transfers found in window")
     cur = _current_price(bn, token, curve, lblock)
 
     def work(item):
@@ -264,9 +293,13 @@ def analyze(token: str) -> Result:
                     proj.append(payload); readable += 1
                     whales_acc.append(res_tuple[2])
 
-    res = Result(token, "v4" if migrated else "curve", migrated, round(bundle, 2),
+    layer = "unknown" if fallback else ("v4" if migrated else "curve")
+    res = Result(token, layer, migrated, round(bundle, 2),
                  readable=readable, holders_seen=scanned)
     res.whales = whales_acc
+    if fallback:
+        # мягкая пометка: читали без launch-контекста (не блокирует дашборд)
+        res.alert = "read without Pons launch context — holders via portal, entry/migration data limited"
     if bundle >= BUNDLE_ALERT_PCT:
         res.alert = f"{bundle:.1f}% of supply held by bundlers among top holders — exit forecast withheld, high risk"
         return res
