@@ -200,7 +200,7 @@ def analyze(token: str) -> Result:
     token = token.lower(); bn = ch.block_number()
     curve, lblock = _find_launch(bn, token)
     if not curve:
-        return Result(token, "unknown", False, 0.0, alert="запуск не найден в окне")
+        return Result(token, "unknown", False, 0.0, alert="launch not found — not a Pons v2 token, or too old to read in window")
     migrated = bool(ch.get_logs(lblock, bn, address=curve, topics=[CURVE_COMPLETED]))
     TS = int(ch.rpc("eth_call", [{"to": token, "data": "0x18160ddd"}, "latest"]), 16)
     all_holders = _holders(bn, token, curve, lblock)[:MAX_SCAN]
@@ -235,7 +235,7 @@ def analyze(token: str) -> Result:
                  readable=readable, holders_seen=scanned)
     res.whales = whales_acc
     if bundle >= BUNDLE_ALERT_PCT:
-        res.alert = f"токен сбандлен на {bundle:.1f}% — прогноз недоступен, риск"
+        res.alert = f"{bundle:.1f}% of supply held by bundlers among top holders — exit forecast withheld, high risk"
         return res
     proj.sort()
     for rel, sh in proj:
