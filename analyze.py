@@ -173,20 +173,27 @@ def _buys_of_token(bn, token, curve, lblock, holder):
 
 
 def _current_price(bn, token, curve, lblock):
-    """Текущая цена: WETH_raw за 1 токен, по медиане свежих сделок."""
+    """Текущая цена: WETH_raw за 1 токен, по медиане свежих сделок.
+    Шагаем окнами С КОНЦА и расширяемся, пока не наберём хватает свопов: активный
+    токен наберёт 12 в первом же узком окне (быстро), а тихий (мало торговался
+    недавно) — не отвалится с None, а найдёт цену чуть глубже в истории."""
     prices = []
-    for lg in ch.get_logs(bn - 60_000, bn, address=token):
-        t = ch.parse_transfer(lg)
-        if not t:
-            continue
-        rc = ch.rpc("eth_getTransactionReceipt", [lg["transactionHash"]])
-        moved = sum(int(l["data"], 16) for l in rc["logs"]
-                    if (p := ch.parse_transfer(l)) and p["token"] == token)
-        q = ch.match_swap_quote(rc["logs"], moved)
-        if q > 0 and moved > 0:
-            prices.append(q / (moved / 1e18))
-        if len(prices) >= 12:
-            break
+    hi = bn; step = 60_000; floor = bn - 800_000
+    while hi > floor and len(prices) < 12:
+        lo = max(hi - step, floor)
+        for lg in ch.get_logs(lo, hi, address=token):
+            t = ch.parse_transfer(lg)
+            if not t:
+                continue
+            rc = ch.rpc("eth_getTransactionReceipt", [lg["transactionHash"]])
+            moved = sum(int(l["data"], 16) for l in rc["logs"]
+                        if (p := ch.parse_transfer(l)) and p["token"] == token)
+            q = ch.match_swap_quote(rc["logs"], moved)
+            if q > 0 and moved > 0:
+                prices.append(q / (moved / 1e18))
+            if len(prices) >= 12:
+                break
+        hi = lo - 1; step = min(step * 2, 300_000)   # окно пустое — шагаем шире
     return median(prices) if prices else None
 
 
