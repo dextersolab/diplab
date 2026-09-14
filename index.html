@@ -277,7 +277,10 @@ function drawChart(R){
   var cLo=Math.min.apply(null,cs.map(function(c){return c[3];}).filter(isFinite));
   var cHi=Math.max.apply(null,cs.map(function(c){return c[2];}).filter(isFinite));
   if(!isFinite(cLo)||!isFinite(cHi)){cLo=price*0.9;cHi=price*1.1;}
-  cHi=Math.min(cHi, med*3.5); cLo=Math.max(cLo, med/3.5);
+  // cap the top near ~1.8x price so a pump wick doesn't shove NOW to the floor;
+  // gives the exit walls + scenario the lower half of the chart to breathe.
+  cHi=Math.min(cHi, price*1.8);
+  // don't clamp the low - if it dumped, show it; walls are unioned in below anyway.
   // final range = clamped candles UNION every wall price UNION NOW (walls never fall off)
   var all=wallP.concat([price, cLo, cHi]).filter(isFinite);
   var lo=Math.min.apply(null,all), hi=Math.max.apply(null,all);
