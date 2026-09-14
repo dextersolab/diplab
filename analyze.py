@@ -217,7 +217,7 @@ def analyze(token: str) -> Result:
         return ("level", (ep * med / cur, v / TS * 100), {"addr": a, "mult": round(med,2), "n": n, "supply_pct": round(v/TS*100,1), "exit_rel": round(ep*med/cur,2)})
 
     # сканируем холдеров пачками по убыванию доли, добирая до TARGET_READABLE читаемых
-    bundle = 0.0; proj = []; readable = 0; scanned = 0
+    bundle = 0.0; proj = []; readable = 0; scanned = 0; whales_acc = []
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
         while scanned < len(all_holders) and readable < TARGET_READABLE:
             batch = all_holders[scanned:scanned + WORKERS]
@@ -229,10 +229,11 @@ def analyze(token: str) -> Result:
                 if kind == "bundle" and is_top: bundle += payload
                 elif kind == "level":
                     proj.append(payload); readable += 1
-                    res.whales.append(res_tuple[2])
+                    whales_acc.append(res_tuple[2])
 
     res = Result(token, "v4" if migrated else "curve", migrated, round(bundle, 2),
                  readable=readable, holders_seen=scanned)
+    res.whales = whales_acc
     if bundle >= BUNDLE_ALERT_PCT:
         res.alert = f"токен сбандлен на {bundle:.1f}% — прогноз недоступен, риск"
         return res
