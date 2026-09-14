@@ -270,18 +270,19 @@ function drawChart(R){
             kind: l.rel>=1 ? 'res':'exit'};
   });
   var wallP=levels.map(function(l){return l.rel*price;});
-  // robust axis: base on close prices + walls, clamp wild wicks
+  // axis: clamp only wild candle WICKS, but the range must always fit every wall + NOW.
   var closes=cs.map(function(c){return c[4];}).filter(isFinite).sort(function(a,b){return a-b;});
   var med=closes[Math.floor(closes.length/2)]||price;
-  var lows=cs.map(function(c){return c[3];}).concat(wallP).concat([price]);
-  var highs=cs.map(function(c){return c[2];}).concat(wallP).concat([price]);
-  var lo=Math.min.apply(null,lows), hi=Math.max.apply(null,highs);
+  // candle extent, with wicks clamped to ~3.5x median so one spike can't blow up the scale
+  var cLo=Math.min.apply(null,cs.map(function(c){return c[3];}).filter(isFinite));
+  var cHi=Math.max.apply(null,cs.map(function(c){return c[2];}).filter(isFinite));
+  if(!isFinite(cLo)||!isFinite(cHi)){cLo=price*0.9;cHi=price*1.1;}
+  cHi=Math.min(cHi, med*3.5); cLo=Math.max(cLo, med/3.5);
+  // final range = clamped candles UNION every wall price UNION NOW (walls never fall off)
+  var all=wallP.concat([price, cLo, cHi]).filter(isFinite);
+  var lo=Math.min.apply(null,all), hi=Math.max.apply(null,all);
   if(!isFinite(lo)||!isFinite(hi)||hi<=lo){lo=price*0.5;hi=price*1.5;}
-  // clamp so the visible range is at most ~6x median (kills 50x wick blowups)
-  var cap=med*3.5, flr=med/3.5;
-  if(hi>cap && cap>price) hi=cap;
-  if(lo<flr && flr<price && flr>0) lo=flr;
-  var pad=(hi-lo)*0.09; lo-=pad; hi+=pad;
+  var pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
   function y(p){return (1-(p-lo)/(hi-lo))*100;}
   function fmt(p){return '$'+p.toFixed(p<0.001?6:5);}
   var plotW=cs.length?58:58, cw=plotW/(cs.length||1);
@@ -312,15 +313,15 @@ function drawChart(R){
   // scenario: thread the walls. build points from now -> down through exit walls -> floor
   if(R.showScenario!==false && levels.filter(function(l){return l.kind==='exit';}).length){
     var exits=levels.filter(function(l){return l.kind==='exit';}).sort(function(a,b){return b.rel-a.rel;});
-    var xs=[59,64,70,76,82], pts=[[57,y(price)]];
-    // little bump up then down through each exit wall
-    pts.push([xs[0], y(price*1.03)]);
-    var xi=1;
+    // start exactly at the right edge of the candles, at the current price
+    var startX=Math.min(58, (cs.length*cw));
+    var xs=[startX+3,startX+9,startX+16,startX+23,startX+30], pts=[[startX,y(price)]];
+    var xi=0;
     for(var e=0;e<exits.length && xi<xs.length;e++){ pts.push([xs[xi], y(exits[e].rel*price)]); xi++; }
     var floorRel = exits.length?exits[exits.length-1].rel*0.96:0.7;
-    pts.push([Math.min(88,xs[Math.min(xi,xs.length-1)]+5), y(price*floorRel)]);
+    pts.push([Math.min(90,xs[Math.min(xi,xs.length-1)]+6), y(price*floorRel)]);
     var poly=pts.map(function(p){return p[0]+','+p[1];}).join(' ');
-    H+='<svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none">'
+    H+='<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none">'
       +'<polyline fill="none" stroke="#2b3f5c" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke" points="'+poly+'"/></svg>';
     // dots on wall crossings (skip first/last)
     for(var d=1;d<pts.length-1;d++){
