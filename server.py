@@ -4,7 +4,7 @@
 Analysis is live per token (~1-3 min), so results are cached in-memory.
 No keys or signing here; RPC comes from the DIPLAB_RPC env only.
 """
-import json, time, threading, os, urllib.request
+import json, time, threading, os, urllib.request, urllib.error
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from dataclasses import asdict
@@ -12,10 +12,27 @@ from analyze import analyze
 
 GT = "https://api.geckoterminal.com/api/v2/networks/robinhood"
 
-def _gt(path):
-    req = urllib.request.Request(GT + path, headers={"accept": "application/json", "user-agent": "diplab/0.1"})
-    with urllib.request.urlopen(req, timeout=15) as r:
-        return json.loads(r.read())
+def _gt(path, _tries=4):
+    # GeckoTerminal free tier rate-limits (HTTP 429); retry with backoff so a
+    # transient limit doesn't blank out price/candles.
+    last = None
+    for i in range(_tries):
+        req = urllib.request.Request(GT + path, headers={"accept": "application/json", "user-agent": "diplab/0.1"})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code == 429:
+                time.sleep(1.2 * (i + 1))  # 1.2s, 2.4s, 3.6s...
+                continue
+            raise
+        except Exception as e:
+            last = e
+            time.sleep(0.6 * (i + 1))
+    if last:
+        raise last
+    return {}
 
 def fetch_market(token):
     """Текущая цена в USD + свечи для графика (GeckoTerminal). Ошибки не фатальны."""
@@ -23,11 +40,30 @@ def fetch_market(token):
         pools = _gt(f"/tokens/{token}/pools").get("data", [])
         if not pools:
             return {}
-        p = pools[0]
+        # выбрать пул с максимальной ликвидностью (а не первый попавшийся —
+        # первый может быть пустым/битым, отдавать price=None и 0 свечей)
+        def _liq(pl):
+            try:
+                return float(pl["attributes"].get("reserve_in_usd") or 0)
+            except Exception:
+                return 0.0
+        p = max(pools, key=_liq)
         pool = p["attributes"]["address"]
         price = float(p["attributes"].get("base_token_price_usd") or 0)
         name = p["attributes"].get("name", "")
-        oc = _gt(f"/pools/{pool}/ohlcv/hour?limit=48").get("data", {}).get("attributes", {}).get("ohlcv_list", [])
+        # минутные свечи (~2ч истории); если минутных мало — фолбэк на часовые
+        def _ohlcv(res, lim):
+            return _gt(f"/pools/{pool}/ohlcv/{res}?limit={lim}").get("data", {}).get("attributes", {}).get("ohlcv_list", [])
+        oc = []
+        try:
+            oc = _ohlcv("minute", 120)
+        except Exception:
+            oc = []
+        if len(oc) < 5:
+            try:
+                oc = _ohlcv("hour", 48) or oc
+            except Exception:
+                pass
         candles = [[int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4])] for c in oc]  # ts,o,h,l,c
         vol = p["attributes"].get("volume_usd") or {}
         created = p["attributes"].get("pool_created_at")
