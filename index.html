@@ -23,6 +23,7 @@
   .head{margin:6px 0 18px;font-size:13px;color:var(--dim)}
   .head b{color:var(--ink)}
   .alert{border:1px solid var(--red);color:var(--red);padding:14px;font-size:14px;letter-spacing:.5px}
+    .chartcap{color:#5f6b64;font-size:10px;margin-top:6px;letter-spacing:.5px}
   .chart{margin:8px 0 20px;border:1px solid var(--line);padding:10px;background:#0a0f0d}
   .map{position:relative;border-left:1px solid var(--line);margin:10px 0 0 6px;padding-left:0}
   .row{display:flex;align-items:center;gap:12px;padding:7px 0;font-size:13px}
@@ -110,7 +111,7 @@ function drawChart(m, levels){
   for(let i=1;i<labs.length;i++){ if(labs[i].y-labs[i-1].y<15) labs[i].y=labs[i-1].y+15; }
   labs.forEach(L=>{ svg+=`<text x="${lineEnd+6}" y="${(L.y+3).toFixed(0)}" fill="${L.c}" font-size="10.5" font-family="monospace">${L.t}</text>`; });
   svg+='</svg>';
-  return `<div class="chart">${svg}</div>`;
+  return `<div class="chart">${svg}<div class="chartcap">1m candles · last ~2h · via GeckoTerminal</div></div>`;
 }
 
 function render(d){
