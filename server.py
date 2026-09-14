@@ -8,7 +8,7 @@ import json, time, threading, os, urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from dataclasses import asdict
-from analyze import analyze
+from diplab.analyze import analyze
 
 GT = "https://api.geckoterminal.com/api/v2/networks/robinhood"
 
@@ -46,7 +46,8 @@ def fetch_market(token):
     except Exception:
         return {}
 
-CACHE = {}                 # token -> (ts, dict)
+CACHE = {}                 # token -> (ts, dict)  готовый результат
+JOBS = {}                  # token -> {"status": "pending"|"done"|"error", "data"/"error", "ts"}
 RECENT = []                # последние проверки: {token,pair,score,band,ts}
 CACHE_TTL = 300            # 5 min
 _lock = threading.Lock()
@@ -83,6 +84,34 @@ def run_cached(token):
         del RECENT[30:]                                             # держим 30
     return d, False
 
+def _run_job(token):
+    try:
+        d, _ = run_cached(token)
+        with _lock:
+            JOBS[token] = {"status": "done", "data": d, "ts": time.time()}
+    except Exception as e:
+        with _lock:
+            JOBS[token] = {"status": "error", "error": str(e), "ts": time.time()}
+
+
+def start_job(token):
+    """Запустить анализ в фоне, если он ещё не идёт и не готов. Вернёт текущий статус."""
+    token = token.lower().strip()
+    now = time.time()
+    with _lock:
+        hit = CACHE.get(token)
+        if hit and now - hit[0] < CACHE_TTL:
+            return {"status": "done", "data": hit[1]}
+        job = JOBS.get(token)
+        if job and job["status"] == "pending":
+            return {"status": "pending"}
+        if job and job["status"] in ("done", "error") and now - job["ts"] < 15:
+            return job                              # свежий результат/ошибка
+        JOBS[token] = {"status": "pending", "ts": now}
+    threading.Thread(target=_run_job, args=(token,), daemon=True).start()
+    return {"status": "pending"}
+
+
 class H(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         b = body if isinstance(body, bytes) else body.encode()
@@ -99,17 +128,18 @@ class H(BaseHTTPRequestHandler):
         if u.path == "/api/recent":
             with _lock:
                 return self._send(200, json.dumps({"recent": list(RECENT)}))
-        if u.path == "/api/analyze":
+        if u.path in ("/api/analyze", "/api/result"):
             q = parse_qs(u.query)
             token = (q.get("token") or [""])[0]
             if not token.startswith("0x") or len(token) != 42:
                 return self._send(400, json.dumps({"error": "bad token address"}))
-            try:
-                d, cached = run_cached(token)
-                d["cached"] = cached
-                return self._send(200, json.dumps(d))
-            except Exception as e:
-                return self._send(500, json.dumps({"error": str(e)}))
+            job = start_job(token)
+            if job["status"] == "done":
+                out = dict(job["data"]); out["status"] = "done"
+                return self._send(200, json.dumps(out))
+            if job["status"] == "error":
+                return self._send(200, json.dumps({"status": "error", "error": job["error"]}))
+            return self._send(200, json.dumps({"status": "pending"}))
         if u.path in ("/", "/index.html"):
             try:
                 with open(os.path.join(os.path.dirname(__file__), "index.html"), "rb") as f:
