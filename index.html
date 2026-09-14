@@ -1,139 +1,396 @@
-<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DIPLAB — where whales exit</title>
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DIPLAB - chart direction predictor for Robinhood memecoins</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#080b0a;--ink:#d7e2dc;--dim:#5f6b64;--grn:#57e39a;--amber:#ffcf5c;--red:#ff6b6b;--line:#17201c}
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{background:var(--bg);color:var(--ink);font-family:'JetBrains Mono',ui-monospace,monospace;min-height:100vh}
-  .wrap{max-width:760px;margin:0 auto;padding:8vh 22px 60px}
-  .brand{font-size:clamp(40px,10vw,72px);font-weight:800;letter-spacing:3px;color:#fff}
-  .brand b{color:var(--grn)}
-  .tag{color:var(--dim);letter-spacing:1px;margin:6px 0 32px;font-size:13px}
-  .search{display:flex;border:1px solid #24302b;background:#0b100e;max-width:600px}
-  #q{flex:1;background:transparent;border:0;outline:0;color:var(--ink);font:400 15px 'JetBrains Mono',monospace;padding:14px;letter-spacing:.5px}
-  #q::placeholder{color:#3f4a44}
-  #go{background:transparent;border:0;border-left:1px solid #24302b;color:var(--grn);font:700 13px 'JetBrains Mono',monospace;letter-spacing:2px;padding:0 22px;cursor:pointer}
-  #go:hover{background:rgba(87,227,154,.08)}
-  #out{margin-top:34px;min-height:20px}
-  .status{color:var(--dim);font-size:13px;line-height:1.8;white-space:pre-wrap}
-  .status .g{color:var(--grn)}.status .r{color:var(--red)}
-  .load{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--grn);animation:p 1s infinite}
-  @keyframes p{0%,100%{opacity:.25}50%{opacity:1}}
-  .head{margin:6px 0 18px;font-size:13px;color:var(--dim)}
-  .head b{color:var(--ink)}
-  .alert{border:1px solid var(--red);color:var(--red);padding:14px;font-size:14px;letter-spacing:.5px}
-    .chartcap{color:#5f6b64;font-size:10px;margin-top:6px;letter-spacing:.5px}
-  .chart{margin:8px 0 20px;border:1px solid var(--line);padding:10px;background:#0a0f0d}
-  .map{position:relative;border-left:1px solid var(--line);margin:10px 0 0 6px;padding-left:0}
-  .row{display:flex;align-items:center;gap:12px;padding:7px 0;font-size:13px}
-  .bar{height:10px;border-radius:2px}
-  .above .bar{background:var(--amber)} .below .bar{background:var(--red)}
-  .cur{color:var(--grn);border-top:1px dashed var(--grn);padding-top:8px;margin-top:8px;font-size:12px;letter-spacing:1px}
-  .lvl{color:var(--ink)} .sub{color:var(--dim);font-size:11px}
-  .disc{color:var(--dim);font-size:11px;margin-top:12px;line-height:1.6;font-style:italic}
-  .foot{color:var(--dim);font-size:11px;margin-top:26px;line-height:1.7;border-top:1px solid var(--line);padding-top:14px}
+:root{--ink:#2b3f5c;--mut:#5b7799;--accent:#4a86c8;--grn:#3fae7a;--amb:#e0a94c;--red:#e0736b;--bg:#e9f1f8;--card:#fff;--line:#dce9f4}
+*{box-sizing:border-box}
+html,body{margin:0;font-family:'DM Mono',ui-monospace,monospace;color:var(--ink);background:var(--bg)}
+body{background-image:linear-gradient(#dae7f4 1px,transparent 1px),linear-gradient(90deg,#dae7f4 1px,transparent 1px);background-size:26px 26px;min-height:100vh}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{max-width:1500px;margin:0 auto;padding:0 22px}
+.pixel{font-family:'Press Start 2P',monospace}
+header{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);border-bottom:2px solid var(--ink)}
+.hd{display:flex;align-items:center;gap:16px;padding:12px 0}
+.logo{display:flex;align-items:center;gap:10px}
+.logo img{width:40px;height:40px;image-rendering:pixelated;border:2px solid var(--ink)}
+.logo .t{font-family:'Press Start 2P',monospace;font-size:22px;letter-spacing:1px}
+.logo .t b{color:var(--red);font-weight:400}
+.live{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:1px;border:1px solid var(--line);padding:6px 10px;color:#4f6b87}
+.live i{width:7px;height:7px;background:var(--grn);display:block;animation:blink 1.6s steps(1,end) infinite}
+@keyframes blink{50%{opacity:.25}}
+nav{margin-left:auto;display:flex;gap:22px;font-size:13px}
+@media(max-width:720px){nav{gap:14px;font-size:12px}.logo .t{font-size:18px}}
+.btn{font-family:inherit;cursor:pointer;background:var(--red);color:#fff;border:2px solid var(--ink);box-shadow:4px 4px 0 var(--ink);padding:16px 26px;font-size:15px;letter-spacing:2px;font-family:'Press Start 2P',monospace}
+.btn:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--ink)}
+.btn.ghost{background:#fff;color:var(--ink);box-shadow:3px 3px 0 var(--ink);font-size:11px;padding:10px 16px;font-family:'DM Mono',monospace;letter-spacing:1px}
+.card{background:var(--card);border:2px solid var(--ink);box-shadow:5px 5px 0 rgba(43,63,92,.12)}
+/* ---------- LANDING ---------- */
+#landing{padding:36px 0 60px}
+.hero{display:grid;grid-template-columns:200px 1fr;gap:30px;align-items:center}
+@media(max-width:820px){.hero{grid-template-columns:1fr;text-align:center}.hero .mascot{margin:0 auto}}
+.hero .mascot{width:200px;height:200px;image-rendering:pixelated;border:2px solid var(--ink)}
+.hero h1{font-family:'Press Start 2P',monospace;font-size:clamp(34px,6vw,72px);margin:0 0 14px}
+.hero h1 b{color:var(--red);font-weight:400}
+.sub{font-size:clamp(13px,1.6vw,17px);line-height:1.55;color:var(--ink);max-width:760px}
+.searchrow{display:flex;gap:14px;margin:22px 0 8px;max-width:900px}
+@media(max-width:600px){.searchrow{flex-direction:column}}
+.searchrow input{flex:1;font-family:inherit;font-size:17px;padding:18px 18px;border:2px solid var(--ink);box-shadow:inset 2px 2px 0 rgba(43,63,92,.06);color:var(--ink);background:#fff}
+.searchrow input::placeholder{color:#9db4cd}
+.undersearch{display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--mut)}
+.counter{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);padding:6px 10px;color:var(--accent);font-weight:500}
+.counter i{width:7px;height:7px;background:var(--grn);display:block}
+.sec{margin-top:54px}
+.sec h2{font-family:'Press Start 2P',monospace;font-size:20px;margin:0 0 6px}
+.sec .lead{color:var(--mut);font-size:13px;margin:0 0 20px}
+.video{aspect-ratio:16/9;border:2px solid var(--ink);background:#eef4fa;overflow:hidden;position:relative}
+.video video{width:100%;height:100%;object-fit:cover;display:block}
+.vidcap{color:var(--mut);font-size:12.5px;margin-top:10px}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media(max-width:900px){.steps{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.steps{grid-template-columns:1fr}}
+.step{padding:18px}.step .n{font-family:'Press Start 2P',monospace;font-size:12px;color:#fff;padding:4px 6px;margin-right:8px}
+.step h3{font-family:'Press Start 2P',monospace;font-size:12px;display:inline}
+.step p{color:var(--mut);font-size:13px;line-height:1.5;margin:12px 0 0}
+.step{transition:transform .12s,box-shadow .12s}.step:hover{transform:translate(-2px,-2px);box-shadow:7px 7px 0 rgba(43,63,92,.16)}
+/* roadmap */
+.roadmap{display:grid;grid-template-columns:1fr 360px;gap:26px;align-items:start}
+@media(max-width:980px){.roadmap{grid-template-columns:1fr}.presenter{display:none}}
+.stages{display:flex;flex-direction:column;gap:16px}
+.stage{padding:18px 20px;transition:box-shadow .2s,border-color .2s}
+.stage.active{box-shadow:6px 6px 0 rgba(74,134,200,.25);border-color:var(--accent)}
+.badge{display:inline-block;font-family:'Press Start 2P',monospace;font-size:12px;color:#fff;border:2px solid var(--ink);box-shadow:2px 2px 0 var(--ink);padding:8px 12px;margin-right:10px}
+.stage .when{font-size:12px;color:var(--mut)}
+.stage ul{list-style:none;margin:14px 0 0;padding:0}
+.stage li{padding:8px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.45}
+.stage li:first-child{border-top:none}
+.stage li b{color:var(--ink)}.stage li span{color:var(--mut)}
+.presenter{position:sticky;top:80px;border:2px solid var(--ink);background:#dcebfb;background-image:radial-gradient(#c7ddf3 1px,transparent 1px);background-size:16px 16px;height:520px;display:flex;align-items:center;justify-content:center}
+.presenter img{width:78%;image-rendering:pixelated;filter:drop-shadow(3px 4px 0 rgba(43,63,92,.15))}
+.vision{margin-top:20px;font-style:italic;color:var(--mut);font-size:14px;text-align:center}
+footer{border-top:2px solid var(--ink);margin-top:50px;background:rgba(255,255,255,.6)}
+.ft{display:flex;gap:22px;align-items:center;padding:18px 0;flex-wrap:wrap}
+.ft .sp{margin-left:auto;color:var(--mut);font-size:12px}
+.ft a{display:inline-flex;align-items:center;gap:6px;font-size:14px}
+/* ---------- RESULT ---------- */
+#result{display:none;padding:20px 0 0}
+.tokbar{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding:14px 18px;margin-bottom:16px}
+.tokbar .tk{font-family:'Press Start 2P',monospace;font-size:12px}
+.chip{font-size:11px;letter-spacing:.5px;border:1px solid var(--accent);color:var(--accent);padding:3px 7px}
+.mut{color:var(--mut)}.lab{font-size:10px;letter-spacing:1px;color:#4f6b87}
+.cols{display:grid;grid-template-columns:1.9fr 1fr;gap:16px}
+@media(max-width:960px){.cols{grid-template-columns:1fr}}
+.exitmap{padding:20px}
+.exitmap .top{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.exitmap .top h2{font-family:'Press Start 2P',monospace;font-size:13px;letter-spacing:1px;margin:0}
+.legend{margin-left:auto;display:flex;gap:16px;font-size:11px;color:var(--mut)}
+.legend b{display:inline-block;width:16px;border-top:2px dashed;vertical-align:middle;margin-right:5px}
+.plot{position:relative;height:min(58vh,520px);border:1px solid var(--line);background:#fbfdff;background-image:linear-gradient(#eef5fb 1px,transparent 1px),linear-gradient(90deg,#eef5fb 1px,transparent 1px);background-size:8% 12.5%;margin:0 0 8px;overflow:hidden}
+.plotcap{display:flex;justify-content:space-between;color:var(--mut);font-size:12px}
+.verdict{padding:20px;margin-top:16px;display:grid;grid-template-columns:64px 1fr;gap:16px;align-items:start}
+.verdict img{width:64px;height:64px;image-rendering:pixelated;border:2px solid var(--ink)}
+.verdict .vl{font-size:10px;letter-spacing:1.5px;color:var(--red)}
+.verdict p{margin:6px 0 0;font-size:15px;line-height:1.5}
+.vkpis{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+@media(max-width:600px){.vkpis{grid-template-columns:1fr}}
+.vkpi{border:1px solid var(--line);padding:12px 14px}.vkpi .k{font-size:9.5px;letter-spacing:.6px;color:#4f6b87}.vkpi .v{font-family:'Press Start 2P',monospace;font-size:13px;margin-top:6px}
+.side{display:flex;flex-direction:column;gap:16px}
+.scorebox{padding:18px}.scorebox .k{font-size:10px;letter-spacing:1.5px;color:#4f6b87;margin-bottom:8px}
+.scorebox .big{font-family:'Press Start 2P',monospace;font-size:52px;line-height:1}
+.scorebox .band{font-family:'Press Start 2P',monospace;font-size:15px;margin-left:10px}
+.blocks{display:flex;gap:3px;margin:14px 0 8px}.blocks div{flex:1;height:14px;border:1px solid var(--line)}
+.scorebox .ends{display:flex;justify-content:space-between;font-size:11px;color:var(--mut)}
+.stats{padding:18px}.stats .k{font-size:10px;letter-spacing:1px;color:#4f6b87;margin-bottom:8px}
+.strow{display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid var(--line);font-size:13px}
+.strow:first-of-type{border-top:none}
+.whalesbox{padding:18px}.whalesbox h3{font-family:'Press Start 2P',monospace;font-size:11px;line-height:1.5;margin:0}
+.whalesbox .hint{font-size:11.5px;color:var(--mut);margin:8px 0 12px;line-height:1.4}
+.wrow{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
+.wrow .addr{font-size:12.5px}.wrow .sp{margin-left:auto;font-size:12.5px;color:var(--mut)}
+.feed{margin-top:16px;padding:12px 16px;overflow:hidden}
+.feed .fl{display:flex;align-items:center;gap:14px}
+.feed .title{font-family:'Press Start 2P',monospace;font-size:11px;white-space:nowrap}
+.feed .cnt{color:var(--mut);font-size:12px;white-space:nowrap;border-left:1px solid var(--line);padding-left:14px}
+.ticker{overflow:hidden;flex:1;-webkit-mask-image:linear-gradient(90deg,transparent,#000 4%,#000 96%,transparent)}
+.track{display:flex;width:max-content;gap:26px;animation:marquee 46s linear infinite}
+@keyframes marquee{to{transform:translateX(-50%)}}
+.ti{display:flex;align-items:center;gap:8px;white-space:nowrap;font-size:12.5px}
+.ti .pr{font-weight:500}.ti .sc{font-family:'Press Start 2P',monospace;font-size:11px}
+.ti .bd{font-size:10px;letter-spacing:.5px;padding:2px 6px;border:1px solid}.ti .ago{color:var(--mut);font-size:11px}
+/* loading overlay */
+#loading{display:none;padding:60px 0}
+.loadcard{max-width:760px;margin:0 auto;text-align:center}
+.loadbar{position:relative;height:34px;border:2px solid var(--ink);background:#eef4fa;margin:26px 0 14px;overflow:visible}
+.loadbar .fill{position:absolute;left:0;top:0;bottom:0;background:#bfdcf3;width:0%;transition:width .12s linear}
+.runner{position:absolute;bottom:0;left:0;width:52px;height:70px;image-rendering:pixelated;
+  background:url('assets/runner.png') 0 0/400% 200% no-repeat;
+  animation:run .6s steps(1,end) infinite;transform:translateX(-50%);transition:left .12s linear}
+@keyframes run{0%{background-position:0 0}12.5%{background-position:33.33% 0}25%{background-position:66.66% 0}37.5%{background-position:100% 0}50%{background-position:0 100%}62.5%{background-position:33.33% 100%}75%{background-position:66.66% 100%}87.5%{background-position:100% 100%}}
+#loading .stg{font-size:14px;color:var(--ink)}
+#loading .el{font-size:12px;color:var(--mut);margin-top:6px}
+.hidden{display:none!important}
 </style></head>
-<body><div class="wrap">
-  <div class="brand">DIP<b>LAB</b></div>
-  <div class="tag">where whales enter, exit and accumulate — the on-chain read on any token</div>
-  <div class="search">
-    <input id="q" autocomplete="off" spellcheck="false" placeholder="paste a token contract address (0x…)">
-    <button id="go">RESOLVE</button>
-  </div>
-  <div id="out"></div>
-  <div class="foot">DIPLAB reads how each top holder behaved across past tokens, projects their exit onto this one, and maps the walls.</div>
+<body>
+<header><div class="wrap hd">
+  <div class="logo" onclick="showLanding()" style="cursor:pointer"><img src="assets/mascot.jpg" alt=""><span class="t">DIP<b>LAB</b></span></div>
+  <span class="live"><i></i>LIVE ENGINE</span>
+  <nav><a href="#how" onclick="showLanding()">how it works</a><a href="#roadmap" onclick="showLanding()">roadmap</a><a href="#" id="xlink">X</a><a href="https://github.com/dextersolab/diplab" target="_blank">GitHub</a></nav>
+</div></header>
+
+<!-- ===================== LANDING ===================== -->
+<main id="landing"><div class="wrap">
+  <section class="hero">
+    <img class="mascot" src="assets/mascot.jpg" alt="DIPLAB scientist">
+    <div>
+      <h1>DIP<b>LAB</b></h1>
+      <p class="sub">first chart direction predictor for Robinhood memecoins. DIPLAB reads how top holders traded before to call where they will exit - so you see the best spots to enter, accumulate and exit.</p>
+      <div class="searchrow">
+        <input id="ca" placeholder="&gt; paste a contract address - 0x..." spellcheck="false" onkeydown="if(event.key==='Enter')resolve()">
+        <button class="btn" onclick="resolve()">RESOLVE</button>
+      </div>
+      <div class="undersearch">
+        <span>scan top holders live - predict where the chart goes - no wallet connect</span>
+        <span class="counter"><i></i><b id="scanned1">- tokens scanned</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="lab">
+    <div class="video"><video src="assets/agents.mp4" autoplay muted loop playsinline></video></div>
+    <p class="vidcap">inside the lab - each agent reads a different signal: holders, trade history, bundles, exit levels.</p>
+  </section>
+
+  <section class="sec" id="how">
+    <h2>HOW IT WORKS</h2><p class="lead">four agents, one verdict</p>
+    <div class="steps">
+      <div class="card step"><span class="n" style="background:var(--accent)">01</span><h3>SCAN</h3><p>pulls the top holders of any token straight off chain - no wallet connect, no signature.</p></div>
+      <div class="card step"><span class="n" style="background:var(--accent)">02</span><h3>TRACE</h3><p>reads how each whale exited across past tokens to learn the multiple they habitually sell at.</p></div>
+      <div class="card step"><span class="n" style="background:var(--amb)">03</span><h3>MAP</h3><p>projects those exits into walls, dips and one scenario line threading them on the chart.</p></div>
+      <div class="card step"><span class="n" style="background:var(--red)">04</span><h3>SCORE</h3><p>factors psychological levels and rates the token's exit-risk from 100 clean to 0 run.</p></div>
+    </div>
+  </section>
+
+  <section class="sec" id="roadmap">
+    <h2>ROADMAP</h2><p class="lead">shipped, next, and the lab</p>
+    <div class="roadmap">
+      <div class="stages">
+        <div class="card stage" data-i="0"><div><span class="badge" style="background:var(--grn)">SHIPPED</span><span class="when">live now</span></div>
+          <ul><li><b>deeper scans</b> <span>- top 50 holders</span></li><li><b>priority lane</b> <span>- your scan runs first</span></li><li><b>scan history</b> <span>- save and revisit checks</span></li><li><b>export</b> <span>- take results out as image or CSV</span></li></ul></div>
+        <div class="card stage" data-i="1"><div><span class="badge" style="background:var(--accent)">NEXT</span><span class="when">shipping this week</span></div>
+          <ul><li><b>Telegram bot</b> <span>- the same read from a contract address in chat</span></li><li><b>whale alerts</b> <span>- pinged when a tracked whale enters or dumps</span></li><li><b>watchlists</b> <span>- follow tokens and wallets</span></li><li><b>wallet profiler</b> <span>- paste a wallet, see its habit and how smart the money is</span></li></ul></div>
+        <div class="card stage" data-i="2"><div><span class="badge" style="background:var(--amb)">THE LAB</span><span class="when">shipping this month</span></div>
+          <ul><li><b>live whale radar</b> <span>- constant chain scan, "wallet X just aped token Y" as it happens</span></li><li><b>smart-money index</b> <span>- every whale ranked by real profit and what they buy now</span></li><li><b>predictive alerts</b> <span>- "near its exit wall" before the dump</span></li><li><b>track record</b> <span>- a public log of DIPLAB's calls and how they played out</span></li></ul></div>
+      </div>
+      <div class="presenter"><img id="poseimg" src="assets/pose1_L.png" alt="scientist presenting the roadmap"></div>
+    </div>
+    <p class="vision">the pre-trade check every Robinhood memecoin trader runs first - and the radar that shows where smart money moves next.</p>
+  </section>
 </div>
+<footer><div class="wrap ft">
+  <a href="#" class="xf">X</a><a href="https://github.com/dextersolab/diplab" target="_blank">GitHub</a>
+  <span class="mut">read-only, holds no keys</span>
+  <span class="sp">DIPLAB - on-chain exit map for Robinhood Chain</span>
+</div></footer>
+</main>
+
+<!-- ===================== LOADING ===================== -->
+<main id="loading"><div class="wrap loadcard">
+  <div class="lab" style="font-size:12px">ANALYZING ON-CHAIN</div>
+  <div class="loadbar"><div class="fill" id="fill"></div><div class="runner" id="runner"></div></div>
+  <div class="stg" id="stg">pulling top holders...</div>
+  <div class="el" id="el">0.0s - reading whale histories, this usually takes ~15-25s</div>
+</div></main>
+
+<!-- ===================== RESULT ===================== -->
+<main id="result"><div class="wrap">
+  <div class="card tokbar">
+    <span class="lab">TOKEN</span><span class="tk" id="r_tok">0x...</span>
+    <span class="chip" id="r_layer">V4</span><span class="chip" id="r_mig">MIGRATED</span>
+    <span class="lab" style="margin-left:8px">PAIR</span><b id="r_pair" class="tk" style="font-size:12px">- / -</b>
+    <span class="lab">PRICE</span><b id="r_price" class="tk" style="font-size:12px"></b><span id="r_chg" class="mut"></span>
+    <button class="btn ghost" style="margin-left:auto" onclick="rescan()">RE-SCAN</button>
+  </div>
+  <div class="cols">
+    <div>
+      <div class="card exitmap">
+        <div class="top"><h2>EXIT MAP</h2><span class="mut" style="font-size:12px">walls projected from whale exit habits</span>
+          <span class="legend"><span><b style="border-color:var(--amb)"></b>RESISTANCE</span><span><b style="border-color:var(--grn)"></b>NOW</span><span><b style="border-color:var(--red)"></b>EXIT WALL</span></span></div>
+        <div class="plot" id="plot"></div>
+        <div class="plotcap"><span>1m candles - last ~2h - via GeckoTerminal</span><span>walls = projected whale sell zones</span></div>
+      </div>
+      <div class="card verdict">
+        <img src="assets/mascot.jpg" alt="">
+        <div><div class="vl">VERDICT</div><p id="r_verdict">-</p></div>
+        <div class="vkpis">
+          <div class="vkpi" style="border-color:#f2c9c5;background:#fdf3f2"><div class="k" style="color:#b3786f">SELL PRESSURE BELOW</div><div class="v" style="color:var(--red)" id="r_sp">-</div></div>
+          <div class="vkpi"><div class="k">NEAREST WALL</div><div class="v" id="r_nw">-</div></div>
+          <div class="vkpi"><div class="k">SCENARIO FLOOR</div><div class="v" id="r_sf">-</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="side">
+      <div class="card scorebox"><div class="k">EXIT-RISK SCORE</div>
+        <div><span class="big" id="r_score">-</span><span class="band" id="r_band"></span></div>
+        <div class="blocks" id="r_blocks"></div>
+        <div class="ends"><span>0 = danger</span><span>100 = clean</span></div></div>
+      <div class="card stats"><div class="k">TOKEN STATS</div><div id="r_stats"></div></div>
+      <div class="card whalesbox"><h3>WHO ARE THESE WHALES</h3>
+        <div class="hint" id="r_whint">-</div><div id="r_whales"></div></div>
+    </div>
+  </div>
+  <div class="card feed"><div class="fl">
+    <span class="title">LIVE - RECENTLY SCANNED</span><span class="cnt" id="scanned2">-</span>
+    <div class="ticker"><div class="track" id="r_feed"></div></div>
+  </div></div>
+</div></main>
+
 <script>
-const out=document.getElementById('q'), go=document.getElementById('go'), box=document.getElementById('out');
-function esc(s){return (s+'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
-async function run(){
-  const t=out.value.trim().toLowerCase();
-  if(!/^0x[0-9a-f]{40}$/.test(t)){ box.innerHTML='<div class="status"><span class="r">[!]</span> that is not a token address (need 0x + 40 hex)</div>'; return; }
-  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-  const showErr=m=>{ box.innerHTML='<div class="status"><span class="r">[!]</span> '+esc(m)+'</div>'; };
-  const started=Date.now();
-  const tick=()=>{ const s=Math.round((Date.now()-started)/1000);
-    box.innerHTML='<div class="status"><span class="load"></span> analyzing on-chain… '+s+'s · reading whale histories, this usually takes ~15-30s</div>'; };
-  tick();
-  try{
-    let j=await (await fetch('/api/analyze?token='+t)).json();
-    if(j.status==='done'){ render(j); return; }
-    if(j.status==='error'){ showErr(j.error||'analysis failed — tap RESOLVE to retry'); return; }
-    while(true){
-      await sleep(2500);
-      if(out.value.trim().toLowerCase()!==t) return;         // юзер сменил токен — бросаем
-      tick();
-      let r; try{ r=await (await fetch('/api/result?token='+t)).json(); }
-      catch(_){ continue; }                                   // сетевой сбой опроса — просто пробуем ещё
-      if(r.status==='done'){ render(r); return; }
-      if(r.status==='error'){ showErr(r.error||'analysis failed — tap RESOLVE to retry'); return; }
-      if(Date.now()-started>150000){ showErr('this token is taking unusually long — tap RESOLVE to retry'); return; }
-    }
-  }catch(e){ showErr('network hiccup — tap RESOLVE to try again.'); }
-}
+var API="https://web-production-63515.up.railway.app";
 
-function drawChart(m, levels){
-  const c=m.candles||[]; const cur=m.price_usd;
-  if(!cur||!c.length) return '';
-  const W=720,H=340,PADL=8,PADR=150,PADT=16,PADB=14;
-  const plotW=W-PADL-PADR, candleW=plotW*0.75, futX=PADL+candleW, lineEnd=W-PADR;
-  let prices=[cur]; c.forEach(k=>prices.push(k[2],k[3]));
-  levels.forEach(l=>{prices.push(cur*l.rel); prices.push(cur*l.rel*(1-(l.dip||0)));});
-  let pmin=Math.min(...prices), pmax=Math.max(...prices); if(pmin<=0)pmin=pmax/1000;
-  const lp=Math.log(pmin),hp=Math.log(pmax),span=(hp-lp)||1;
-  const y=p=>PADT+(hp-Math.log(Math.max(p,pmin)))/span*(H-PADT-PADB);
-  const n=Math.max(c.length,1), cw=Math.min(16,candleW/n*0.7);
-  let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">`;
-  c.slice().reverse().forEach((k,i)=>{
-    const [ts,o,h,l,cl]=k; const x=PADL+(i+0.5)*(candleW/n); const up=cl>=o, col=up?'#57e39a':'#ff6b6b';
-    svg+=`<line x1="${x}" y1="${y(h)}" x2="${x}" y2="${y(l)}" stroke="${col}" stroke-width="1"/>`;
-    const yo=y(o),yc=y(cl); svg+=`<rect x="${x-cw/2}" y="${Math.min(yo,yc)}" width="${cw}" height="${Math.max(1.5,Math.abs(yo-yc))}" fill="${col}"/>`;
+function drawChart(R){
+  var m=R.market||{}, price=m.price_usd||0, cs=(m.candles||[]).slice().reverse();
+  // candles: API gives [ts,o,h,l,c] most-recent-first -> reversed to oldest-first
+  var levels=(R.levels||[]).map(function(l){
+    return {rel:l.rel, supply:l.supply_pct, wallets:l.wallets, dip:l.dip,
+            kind: l.rel>=1 ? 'res':'exit'};
   });
-  const yCur=y(cur);
-  levels.forEach(l=>{ const yy=y(cur*l.rel), above=l.rel>=1, col=above?'#ffcf5c':'#ff6b6b';
-    svg+=`<line x1="${PADL}" y1="${yy}" x2="${lineEnd}" y2="${yy}" stroke="${col}" stroke-dasharray="6 4" stroke-width="${1+Math.min(3,l.supply_pct)}"/>`; });
-  svg+=`<line x1="${PADL}" y1="${yCur}" x2="${lineEnd}" y2="${yCur}" stroke="#57e39a" stroke-dasharray="2 3"/>`;
-  const walls=levels.map(l=>({p:cur*l.rel,dip:l.dip||0})).sort((a,b)=>Math.abs(a.p-cur)-Math.abs(b.p-cur));
-  if(walls.length){
-    const steps=walls.length*2, slot=(lineEnd-futX)/(steps+2); let pts=[[futX,yCur]], k=1;
-    walls.forEach(w=>{ pts.push([futX+slot*k,y(w.p)]); k++; pts.push([futX+slot*k,y(Math.max(w.p*(1-w.dip),pmin))]); k++; });
-    const last=pts[pts.length-1], prev=pts[pts.length-2]; const dx=last[0]-prev[0], dy=last[1]-prev[1], L=Math.hypot(dx,dy)||1;
-    pts.push([last[0]+dx/L*slot*1.4, last[1]+dy/L*slot*1.4]);
-    svg+=`<path d="M ${pts.map(p=>p[0].toFixed(0)+' '+p[1].toFixed(0)).join(' L ')}" fill="none" stroke="#c9d4cd" stroke-width="1.6" stroke-dasharray="4 4" opacity="0.8"/>`;
-    for(let i=1;i<pts.length-1;i+=2) svg+=`<circle cx="${pts[i][0].toFixed(0)}" cy="${pts[i][1].toFixed(0)}" r="3" fill="#c9d4cd"/>`;
-    const [ex,ey]=pts[pts.length-1],[px,py]=pts[pts.length-2],a=Math.atan2(ey-py,ex-px);
-    svg+=`<path d="M ${ex} ${ey} L ${(ex-9*Math.cos(a-0.4)).toFixed(0)} ${(ey-9*Math.sin(a-0.4)).toFixed(0)} M ${ex} ${ey} L ${(ex-9*Math.cos(a+0.4)).toFixed(0)} ${(ey-9*Math.sin(a+0.4)).toFixed(0)}" stroke="#c9d4cd" stroke-width="1.6" opacity="0.8"/>`;
-    svg+=`<text x="${futX+4}" y="${PADT-4}" fill="#5f6b64" font-size="10" font-family="monospace">scenario →</text>`;
+  var wallP=levels.map(function(l){return l.rel*price;});
+  var lows=cs.map(function(c){return c[3];}).concat(wallP);
+  var highs=cs.map(function(c){return c[2];}).concat(wallP);
+  var lo=Math.min.apply(null,lows), hi=Math.max.apply(null,highs);
+  if(!isFinite(lo)||!isFinite(hi)||hi<=lo){lo=price*0.5;hi=price*1.5;}
+  var pad=(hi-lo)*0.09; lo-=pad; hi+=pad;
+  function y(p){return (1-(p-lo)/(hi-lo))*100;}
+  function fmt(p){return '$'+p.toFixed(p<0.001?6:5);}
+  var plotW=cs.length?58:58, cw=plotW/(cs.length||1);
+  var H='';
+  // candles occupy left ~58%
+  for(var i=0;i<cs.length;i++){
+    var o=cs[i][1],h=cs[i][2],lw=cs[i][3],c=cs[i][4];
+    var up=c>=o, col=up?'#3fae7a':'#e0736b';
+    var top=y(Math.max(o,c)),bot=y(Math.min(o,c));
+    var left=(i*cw+cw*0.18);
+    H+='<div style="position:absolute;top:0;bottom:0;left:'+left+'%;width:'+(cw*0.64)+'%">'
+      +'<div style="position:absolute;left:50%;width:2px;margin-left:-1px;top:'+y(h)+'%;height:'+(y(lw)-y(h))+'%;background:'+col+'"></div>'
+      +'<div style="position:absolute;left:0;right:0;top:'+top+'%;height:'+Math.max(0.5,bot-top)+'%;background:'+(up?'#fff':col)+';border:1.5px solid '+col+'"></div>'
+      +'</div>';
   }
-  let labs=levels.map(l=>({y:y(cur*l.rel), t:`$${(cur*l.rel).toPrecision(2)} · ${l.supply_pct.toFixed(1)}% · dip~${((l.dip||0)*100).toFixed(0)}%`, c:l.rel>=1?'#ffcf5c':'#ff6b6b'}));
-  labs.push({y:yCur, t:`now $${cur.toPrecision(3)}`, c:'#57e39a'}); labs.sort((a,b)=>a.y-b.y);
-  for(let i=1;i<labs.length;i++){ if(labs[i].y-labs[i-1].y<15) labs[i].y=labs[i-1].y+15; }
-  labs.forEach(L=>{ svg+=`<text x="${lineEnd+6}" y="${(L.y+3).toFixed(0)}" fill="${L.c}" font-size="10.5" font-family="monospace">${L.t}</text>`; });
-  svg+='</svg>';
-  return `<div class="chart">${svg}<div class="chartcap">1m candles · last ~2h · via GeckoTerminal</div></div>`;
+  // walls (full width)
+  for(var j=0;j<levels.length;j++){
+    var L=levels[j], wp=L.rel*price, wc=L.kind==='res'?'#e0a94c':'#e0736b';
+    var dipTxt = (L.dip!=null)?(' - dip '+Math.round(L.dip*100)+'%'):'';
+    H+='<div style="position:absolute;left:0;right:0;height:0;top:'+y(wp)+'%;border-top:2px dashed '+wc+'">'
+      +'<div style="position:absolute;left:6px;top:-16px;font-size:10px;letter-spacing:.5px;padding:2px 5px;background:#fff;border:1px solid '+wc+';color:'+wc+'">'+L.rel.toFixed(2)+'x</div>'
+      +'<div style="position:absolute;right:6px;top:-16px;font-size:9.5px;letter-spacing:.3px;font-weight:700;white-space:nowrap;padding:2px 5px;background:rgba(255,255,255,.9);color:'+wc+'">'+fmt(wp)+' - '+L.supply.toFixed(1)+'% supply'+dipTxt+'</div>'
+      +'</div>';
+  }
+  // now line
+  H+='<div style="position:absolute;left:0;right:0;height:0;top:'+y(price)+'%;border-top:2px dashed #3fae7a"></div>'
+    +'<div style="position:absolute;left:6px;top:'+y(price)+'%;transform:translateY(-50%);font-size:10px;font-weight:700;padding:2px 6px;background:#3fae7a;color:#fff">NOW '+fmt(price)+'</div>';
+  // scenario: thread the walls. build points from now -> down through exit walls -> floor
+  if(R.showScenario!==false){
+    var exits=levels.filter(function(l){return l.kind==='exit';}).sort(function(a,b){return b.rel-a.rel;});
+    var xs=[59,64,70,76,82], pts=[[57,y(price)]];
+    // little bump up then down through each exit wall
+    pts.push([xs[0], y(price*1.03)]);
+    var xi=1;
+    for(var e=0;e<exits.length && xi<xs.length;e++){ pts.push([xs[xi], y(exits[e].rel*price)]); xi++; }
+    var floorRel = exits.length?exits[exits.length-1].rel*0.96:0.7;
+    pts.push([Math.min(88,xs[Math.min(xi,xs.length-1)]+5), y(price*floorRel)]);
+    var poly=pts.map(function(p){return p[0]+','+p[1];}).join(' ');
+    H+='<svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none">'
+      +'<polyline fill="none" stroke="#2b3f5c" stroke-width="2" stroke-dasharray="5 4" vector-effect="non-scaling-stroke" points="'+poly+'"/></svg>';
+    // dots on wall crossings (skip first/last)
+    for(var d=1;d<pts.length-1;d++){
+      H+='<div style="position:absolute;width:9px;height:9px;margin:-5px 0 0 -5px;background:#fff;border:2px solid #2b3f5c;left:'+pts[d][0]+'%;top:'+pts[d][1]+'%"></div>';
+    }
+    // arrow tip (kept INSIDE box; pointing along last segment down)
+    var tip=pts[pts.length-1], prev=pts[pts.length-2];
+    var ang=Math.atan2(tip[1]-prev[1], tip[0]-prev[0])*180/Math.PI;
+    H+='<div style="position:absolute;left:'+tip[0]+'%;top:'+tip[1]+'%;transform:translate(-50%,-50%) rotate('+ang+'deg);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:12px solid #2b3f5c"></div>';
+    // scenario label above-left of tip, inside box
+    var dropPct=Math.round((1-floorRel)*100);
+    H+='<div style="position:absolute;left:'+(tip[0]-1)+'%;top:calc('+tip[1]+'% - 20px);transform:translate(-100%,-50%);font-size:10px;letter-spacing:.5px;padding:3px 6px;background:#2b3f5c;color:#fff;white-space:nowrap">SCENARIO -'+dropPct+'%</div>';
+  }
+  return H;
 }
+/* ---------- navigation ---------- */
+function show(id){['landing','loading','result'].forEach(function(x){document.getElementById(x).style.display=(x===id)?'block':'none';});window.scrollTo(0,0);}
+function showLanding(){show('landing');}
+/* ---------- landing counter + presenter animation ---------- */
+function loadStats(){fetch(API+'/api/stats').then(function(r){return r.json();}).then(function(d){var n=(d&&d.scanned)||0;var t=n.toLocaleString()+' tokens scanned';document.getElementById('scanned1').textContent=t;document.getElementById('scanned2').textContent=t;}).catch(function(){});}
+loadStats();setInterval(loadStats,30000);
+(function presenter(){var i=0,stages=document.querySelectorAll('.stage'),img=document.getElementById('poseimg');
+ function tick(){stages.forEach(function(s,k){s.classList.toggle('active',k===i);});img.src='assets/pose'+(i+1)+'_L.png';i=(i+1)%3;}
+ tick();setInterval(tick,2200);})();
 
-function render(d){
-  let h=`<div class="head">layer: <b>${d.migrated?'migrated V4 pool':'bonding curve'}</b> · bundled supply: <b>${d.bundle_pct}%</b></div>`;
-  if(d.alert){ box.innerHTML=h+`<div class="alert">⚠ ${esc(d.alert)}</div>`; return; }
-  if(!d.levels.length){ box.innerHTML=h+`<div class="status">no readable exit levels yet — most holders here have too little history to read. honest refusal, not a guess.</div>`; return; }
-  const above=d.levels.filter(l=>l.rel>=1).sort((a,b)=>b.rel-a.rel);
-  const below=d.levels.filter(l=>l.rel<1).sort((a,b)=>b.rel-a.rel);
-  const maxsup=Math.max(...d.levels.map(l=>l.supply_pct),0.5);
-  const rowHtml=(l)=>{const w=Math.max(8,l.supply_pct/maxsup*220);const pct=l.rel>=1?`+${((l.rel-1)*100).toFixed(0)}%`:`−${((1-l.rel)*100).toFixed(0)}%`;
-    const dip=(l.dip!=null)?` · dip ~${(l.dip*100).toFixed(0)}%`:'';
-    return `<div class="row ${l.rel>=1?'above':'below'}"><div class="bar" style="width:${w}px"></div><span class="lvl">${l.rel.toFixed(2)}x (${pct})</span><span class="sub">${l.wallets} whale${l.wallets>1?'s':''} · ${l.supply_pct.toFixed(1)}% supply${dip}</span></div>`;};
-  if(d.market&&d.market.price_usd){ h+=drawChart(d.market, d.levels); }
-  h+='<div class="map">';
-  above.forEach(l=>h+=rowHtml(l));
-  h+='<div class="cur">— current price —</div>';
-  below.forEach(l=>h+=rowHtml(l));
-  h+='</div>';
-  if(d.levels.some(l=>l.dip!=null)) h+='<div class="disc">dip depth is a mechanical estimate from current pool liquidity — a real dump can be deeper (panic). curve-phase tokens use the exact curve formula.</div>';
-  const bel=below.reduce((s,l)=>s+l.supply_pct,0);
-  if(bel>0) h+=`<div class="status" style="margin-top:16px">${bel.toFixed(1)}% of supply sits in whales who habitually exit <span class="r">below</span> current price — sell pressure under you.</div>`;
-  box.innerHTML=h;
+/* ---------- resolve flow ---------- */
+var CUR=null, pollTimer=null, loadTimer=null, loadStart=0, done=false, result=null;
+function resolve(){var ca=document.getElementById('ca').value.trim();if(!/^0x[0-9a-fA-F]{40}$/.test(ca)){document.getElementById('ca').style.borderColor='var(--red)';return;}CUR=ca;startLoading();
+  fetch(API+'/api/analyze?token='+ca).then(function(r){return r.json();}).then(function(d){if(d&&d.status==='done'){finish(d);}else{poll();}}).catch(function(){poll();});}
+function rescan(){show('landing');document.getElementById('ca').focus();}
+function poll(){pollTimer=setInterval(function(){fetch(API+'/api/result?token='+CUR).then(function(r){return r.json();}).then(function(d){if(!d)return;if(d.status==='done'){clearInterval(pollTimer);finish(d);}else if(d.status==='error'){clearInterval(pollTimer);showLanding();alert(d.error||'launch not found - not a Pons v2 token, or too old to read in window');}});},2500);}
+function startLoading(){show('loading');done=false;result=null;loadStart=Date.now();
+  var stages=['pulling top holders','tracing whale exits','mapping walls','scoring exit-risk'];
+  clearInterval(loadTimer);
+  loadTimer=setInterval(function(){var t=(Date.now()-loadStart)/1000;
+    var pct=done?100:Math.min(90,90*(1-Math.pow(1-Math.min(1,t/15),2.2))); /* ~15s to 90% */
+    if(done)pct=100;
+    document.getElementById('fill').style.width=pct+'%';
+    document.getElementById('runner').style.left=pct+'%';
+    document.getElementById('stg').textContent=stages[Math.min(3,Math.floor(t/4))]+'...';
+    document.getElementById('el').textContent=t.toFixed(1)+'s - reading whale histories, this usually takes ~15-25s';
+    if(done&&pct>=100){clearInterval(loadTimer);setTimeout(function(){render(result);},350);}
+  },100);}
+function finish(d){result=d;done=true;loadStats();}
+
+/* ---------- render result ---------- */
+function fmtUsd(n){return '$'+Math.round(n).toLocaleString();}
+function render(R){show('result');
+  var m=R.market||{};
+  document.getElementById('r_tok').textContent=R.token?R.token.slice(0,6)+'...'+R.token.slice(-4):'0x...';
+  document.getElementById('r_layer').textContent=(R.layer==='v4'?'V4':'CURVE');
+  document.getElementById('r_mig').style.display=R.migrated?'':'none';
+  document.getElementById('r_pair').textContent=m.pair||'- / -';
+  document.getElementById('r_price').textContent=m.price_usd?('$'+m.price_usd.toFixed(m.price_usd<0.001?6:5)):'';
+  /* chart */
+  document.getElementById('plot').innerHTML=drawChart(R);
+  /* score */
+  var band=R.band||'OK', bandCols={CLEAN:'#3fae7a',OK:'#e0a94c',RISKY:'#e0736b',DANGER:'#e0736b'},bc=bandCols[band]||'#5b7799';
+  document.getElementById('r_score').textContent=R.score!=null?R.score:'-';
+  var be=document.getElementById('r_band');be.textContent=band;be.style.color=bc;
+  document.getElementById('r_score').style.color=bc;
+  var bl='';for(var i=0;i<20;i++){bl+='<div style="background:'+(i<Math.round((R.score||0)/5)?bc:'#f7fbfe')+'"></div>';}
+  document.getElementById('r_blocks').innerHTML=bl;
+  /* stats */
+  function sv(c){return 'font-family:\'Press Start 2P\',monospace;font-size:12px;color:'+(c||'#2b3f5c')+'';}
+  var st=[['bundle %',(R.bundle_pct||0).toFixed(1)+'%','#e0a94c'],['top-10 concentration',(R.top10_pct||0).toFixed(1)+'%','#e0a94c'],['exit-below-price %',(R.exit_below_pct||0).toFixed(1)+'%','#e0736b'],['readable whales',(R.readable||0)+' / '+(R.holders_seen||0),''],['FDV',fmtUsd(m.fdv_usd||0),''],['liquidity',fmtUsd(m.reserve_usd||0),''],['24h volume',fmtUsd(m.volume_24h||0),''],['age',(m.age_h||0).toFixed(1)+'h','']];
+  document.getElementById('r_stats').innerHTML=st.map(function(r){return '<div class="strow"><span class="mut">'+r[0]+'</span><b style="'+sv(r[2])+'">'+r[1]+'</b></div>';}).join('');
+  /* whales */
+  var ws=(R.whales||[]).slice(0,8);
+  document.getElementById('r_whint').textContent=(R.readable||0)+' of '+(R.holders_seen||0)+' holders readable - multiple = where they usually exit vs entry.';
+  document.getElementById('r_whales').innerHTML=ws.map(function(w){var down=w.mult<1;var ms='font-size:11px;font-weight:700;padding:3px 7px;border:1px solid '+(down?'#f2c9c5':'#c4e5d5')+';background:'+(down?'#fdf3f2':'#f2fbf7')+';color:'+(down?'#e0736b':'#3fae7a');
+    return '<div class="wrow"><span class="addr">'+(w.addr?w.addr.slice(0,6)+'...'+w.addr.slice(-4):'')+'</span><span style="'+ms+'">'+w.mult.toFixed(2)+'x</span><span class="sp">'+(w.supply_pct||0).toFixed(1)+'%</span></div>';}).join('');
+  /* verdict + kpis */
+  var exits=(R.levels||[]).filter(function(l){return l.rel<1;}).sort(function(a,b){return b.rel-a.rel;});
+  var nearest=exits[0], floor=exits[exits.length-1];
+  var below=(R.exit_below_pct||0).toFixed(1);
+  var vtxt=below+'% of supply sits in whales who habitually exit below current price - sell pressure under you.';
+  if(exits.length>=2)vtxt+=' Two walls at '+exits[0].rel.toFixed(2)+'x and '+exits[1].rel.toFixed(2)+'x carry most of it.';
+  document.getElementById('r_verdict').innerHTML=vtxt.replace('below','<strong>below</strong>');
+  document.getElementById('r_sp').textContent=below+'% supply';
+  document.getElementById('r_nw').textContent=nearest?(nearest.rel.toFixed(2)+'x - $'+(nearest.rel*m.price_usd).toFixed(m.price_usd<0.001?6:5)):'-';
+  var floorRel=floor?floor.rel*0.96:0.7;
+  document.getElementById('r_sf').textContent='-'+Math.round((1-floorRel)*100)+'% - $'+(floorRel*m.price_usd).toFixed(m.price_usd<0.001?6:5);
+  /* feed */
+  loadFeed();
 }
-go.onclick=run; out.addEventListener('keydown',e=>{if(e.key==='Enter')run()});
-</script></body></html>
+function loadFeed(){fetch(API+'/api/recent').then(function(r){return r.json();}).then(function(d){if(!d)return;
+  var bandCols={CLEAN:'#3fae7a',OK:'#e0a94c',RISKY:'#e0736b',DANGER:'#e0736b'};
+  var items=(d.recent||[]).slice(0,10).map(function(r){var c=bandCols[r.band]||'#5b7799';var ts=Math.max(0,Math.round(Date.now()/1000-(r.ts||0)));var ago=ts<60?ts+'s ago':Math.round(ts/60)+'m ago';
+    return '<span class="ti"><b class="pr">'+(r.pair||'')+'</b><span class="sc" style="color:'+c+'">'+r.score+'</span><span class="bd" style="color:'+c+';border-color:'+c+';background:'+(r.band==='DANGER'?'#fdf3f2':'#fff')+'">'+r.band+'</span><span class="ago">'+ago+'</span></span>';});
+  if(items.length)document.getElementById('r_feed').innerHTML=items.concat(items).join('');
+}).catch(function(){});}
+loadFeed();
+</script>
+</body></html>

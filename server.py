@@ -8,7 +8,7 @@ import json, time, threading, os, urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from dataclasses import asdict
-from analyze import analyze
+from diplab.analyze import analyze
 
 GT = "https://api.geckoterminal.com/api/v2/networks/robinhood"
 
@@ -165,6 +165,21 @@ class H(BaseHTTPRequestHandler):
             if job["status"] == "error":
                 return self._send(200, json.dumps({"status": "error", "error": job["error"]}))
             return self._send(200, json.dumps({"status": "pending"}))
+        if u.path.startswith("/assets/"):
+            # serve static assets (mascot, runner sprite, poses, video) safely
+            rel = u.path.lstrip("/")
+            base = os.path.dirname(os.path.abspath(__file__))
+            fp = os.path.normpath(os.path.join(base, rel))
+            if not fp.startswith(os.path.join(base, "assets")) or not os.path.isfile(fp):
+                return self._send(404, json.dumps({"error": "not found"}))
+            ext = os.path.splitext(fp)[1].lower()
+            ctype = {
+                ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".webp": "image/webp", ".mp4": "video/mp4", ".svg": "image/svg+xml",
+                ".gif": "image/gif",
+            }.get(ext, "application/octet-stream")
+            with open(fp, "rb") as f:
+                return self._send(200, f.read(), ctype)
         if u.path in ("/", "/index.html"):
             try:
                 with open(os.path.join(os.path.dirname(__file__), "index.html"), "rb") as f:
