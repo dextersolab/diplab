@@ -51,10 +51,17 @@ async function run(){
   if(!/^0x[0-9a-f]{40}$/.test(t)){ box.innerHTML='<div class="status"><span class="r">[!]</span> that is not a token address (need 0x + 40 hex)</div>'; return; }
   box.innerHTML='<div class="status"><span class="load"></span> reading the chain live… this runs live per token, ~10-20 sec.</div>';
   try{
-    const r=await fetch('/api/analyze?token='+t); const d=await r.json();
+    const r=await fetch('/api/analyze?token='+t);
+    const txt=await r.text();
+    let d;
+    try{ d=JSON.parse(txt); }
+    catch(_){
+      box.innerHTML='<div class="status"><span class="r">[!]</span> heavy token — analysis took too long or the server was busy. tap RESOLVE to try again (it caches, so the retry is fast).</div>';
+      return;
+    }
     if(d.error){ box.innerHTML='<div class="status"><span class="r">[!]</span> '+esc(d.error)+'</div>'; return; }
     render(d);
-  }catch(e){ box.innerHTML='<div class="status"><span class="r">[!]</span> '+esc(e.message)+'</div>'; }
+  }catch(e){ box.innerHTML='<div class="status"><span class="r">[!]</span> network hiccup — tap RESOLVE to try again.</div>'; }
 }
 
 function drawChart(m, levels){

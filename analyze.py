@@ -21,7 +21,7 @@ TOP_HOLDERS = 10
 MAX_TRADES = 30      # последних сделок на кошелёк — хватает для паттерна
 TARGET_READABLE = 8  # добираем холдеров, пока не наберём столько читаемых
 MAX_SCAN = 30        # но не сканируем больше стольких холдеров
-WORKERS = 6
+WORKERS = 10
 CURVE_COMPLETED = "0xf8d37a90738ae063b8b8058b66f5880cf3cf7ab0c5d4fa78219696591dfbfb67"
 Q96 = 2 ** 96
 
