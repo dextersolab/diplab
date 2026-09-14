@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 from statistics import median
 from dataclasses import dataclass, field
+import json
 from concurrent.futures import ThreadPoolExecutor
 import chain as ch
 
@@ -21,7 +22,7 @@ TOP_HOLDERS = 10
 MAX_TRADES = 30      # последних сделок на кошелёк — хватает для паттерна
 TARGET_READABLE = 8  # добираем холдеров, пока не наберём столько читаемых
 MAX_SCAN = 30        # но не сканируем больше стольких холдеров
-WORKERS = 10
+WORKERS = 20
 CURVE_COMPLETED = "0xf8d37a90738ae063b8b8058b66f5880cf3cf7ab0c5d4fa78219696591dfbfb67"
 Q96 = 2 ** 96
 
@@ -31,6 +32,10 @@ def _signed(x):
 
 
 WETH_ADDR = "0x0bd7d308f8e1639fab988df18a8011f41eacad73"
+
+import time as _time
+_HABIT_CACHE = {}          # wallet -> (ts, median, n); привычка живёт час, кошельки повторяются
+_HABIT_TTL = 3600
 
 def _pool_state(bn, token, lblock):
     """(sqrtPriceX96, L, token_is_currency0) для мигрировавшего пула.
@@ -91,12 +96,30 @@ def _find_launch(bn, token):
 
 
 def _holders(bn, token, curve, lblock):
+    """Топ-холдеры по балансу. Быстрый путь — Pons Portal API (готовый список,
+    отсортирован); откат — реконструкция из всех переводов (медленно, но надёжно)."""
+    skip = ch.INFRA | {curve} | ch.ROUTERS | {ch.V4_POOL_MGR}
+    # быстрый путь: холдер-API
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            f"https://api.ponsportal.fun/token/{token}/holders?limit=50",
+            headers={"accept": "application/json", "user-agent": "diplab/0.1"})
+        with urllib.request.urlopen(req, timeout=12) as r:
+            data = json.loads(r.read())
+        if data.get("ok") and data.get("holders"):
+            hs = [(h["address"].lower(), int(h["balance"])) for h in data["holders"]
+                  if h["address"].lower() not in skip and int(h.get("balance", 0)) > 0]
+            if hs:
+                return hs                         # уже отсортированы по балансу
+    except Exception:
+        pass
+    # откат: реконструкция из переводов
     bal = defaultdict(int)
     for lg in ch.get_logs(lblock, bn, address=token):
         t = ch.parse_transfer(lg)
         if t:
             v = int(lg["data"], 16); bal[t["frm"]] -= v; bal[t["to"]] += v
-    skip = ch.INFRA | {curve} | ch.ROUTERS | {ch.V4_POOL_MGR}
     return sorted(((a, v) for a, v in bal.items() if v > 0 and a not in skip), key=lambda x: -x[1])
 
 
@@ -152,6 +175,16 @@ def _current_price(bn, token, curve, lblock):
 
 
 def _habit(bn, holder, skip_token):
+    now = _time.time()
+    hit = _HABIT_CACHE.get(holder)
+    if hit and now - hit[0] < _HABIT_TTL:
+        return hit[1], hit[2]
+    med, n = _habit_compute(bn, holder, skip_token)
+    _HABIT_CACHE[holder] = (now, med, n)
+    return med, n
+
+
+def _habit_compute(bn, holder, skip_token):
     wt = ch.topic_for(holder); frm = bn - WINDOW
     pos = defaultdict(lambda: {"qi": 0.0, "to": 0, "ti": 0, "qo": 0.0})
     # --- кривая (дёшево, без чеков) ---
