@@ -216,6 +216,7 @@ main{flex:1 0 auto;min-width:0}.ft{min-height:56px}footer{flex-shrink:0}
     <span class="chip" id="r_layer">V4</span><span class="chip" id="r_mig">MIGRATED</span>
     <span class="lab" style="margin-left:8px">PAIR</span><b id="r_pair" class="tk" style="font-size:12px">- / -</b>
     <span class="lab">PRICE</span><b id="r_price" class="tk" style="font-size:12px"></b><span id="r_chg" class="mut"></span>
+    <span class="lab" style="margin-left:8px">MCAP</span><b id="r_mcap" class="tk" style="font-size:12px"></b>
     <button class="btn ghost" style="margin-left:auto" onclick="rescan()">RE-SCAN</button>
   </div>
   <div class="cols">
@@ -380,6 +381,8 @@ function render(R){show('result');
   document.getElementById('r_mig').style.display=R.migrated?'':'none';
   document.getElementById('r_pair').textContent=m.pair||'- / -';
   document.getElementById('r_price').textContent=m.price_usd?('$'+m.price_usd.toFixed(m.price_usd<0.001?6:5)):'';
+  var mc=m.market_cap_usd||m.fdv_usd||0;
+  document.getElementById('r_mcap').textContent=mc?fmtUsd(mc):'';
   /* chart */
   document.getElementById('plot').innerHTML=drawChart(R);
   /* score */

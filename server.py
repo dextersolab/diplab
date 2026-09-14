@@ -78,6 +78,7 @@ def fetch_market(token):
         return {"price_usd": price, "candles": candles, "pair": name,
                 "reserve_usd": float(p["attributes"].get("reserve_in_usd") or 0),
                 "fdv_usd": float(p["attributes"].get("fdv_usd") or 0),
+                "market_cap_usd": float(p["attributes"].get("market_cap_usd") or p["attributes"].get("fdv_usd") or 0),
                 "volume_24h": float(vol.get("h24") or 0), "age_h": age_h}
     except Exception:
         return {}
