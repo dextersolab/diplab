@@ -8,7 +8,7 @@ import json, time, threading, os, urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from dataclasses import asdict
-from diplab.analyze import analyze
+from analyze import analyze
 
 GT = "https://api.geckoterminal.com/api/v2/networks/robinhood"
 
