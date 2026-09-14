@@ -35,13 +35,13 @@
 </style></head>
 <body><div class="wrap">
   <div class="brand">DIP<b>LAB</b></div>
-  <div class="tag">the map of levels where whales exit — read-only, on-chain</div>
+  <div class="tag">where whales enter, exit and accumulate — the on-chain read on any token</div>
   <div class="search">
     <input id="q" autocomplete="off" spellcheck="false" placeholder="paste a token contract address (0x…)">
     <button id="go">RESOLVE</button>
   </div>
   <div id="out"></div>
-  <div class="foot">DIPLAB reads how each top holder behaved across past tokens, projects their exit onto this one, and maps the walls. It predicts no price and holds no key. Read-only.</div>
+  <div class="foot">DIPLAB reads how each top holder behaved across past tokens, projects their exit onto this one, and maps the walls.</div>
 </div>
 <script>
 const out=document.getElementById('q'), go=document.getElementById('go'), box=document.getElementById('out');
@@ -114,7 +114,7 @@ function drawChart(m, levels){
 }
 
 function render(d){
-  let h=`<div class="head">layer: <b>${d.migrated?'migrated V4 pool':'bonding curve'}</b> · holders read: <b>${d.holders_seen}</b> · readable whales: <b>${d.readable}</b> · bundled supply: <b>${d.bundle_pct}%</b></div>`;
+  let h=`<div class="head">layer: <b>${d.migrated?'migrated V4 pool':'bonding curve'}</b> · bundled supply: <b>${d.bundle_pct}%</b></div>`;
   if(d.alert){ box.innerHTML=h+`<div class="alert">⚠ ${esc(d.alert)}</div>`; return; }
   if(!d.levels.length){ box.innerHTML=h+`<div class="status">no readable exit levels yet — most holders here have too little history to read. honest refusal, not a guess.</div>`; return; }
   const above=d.levels.filter(l=>l.rel>=1).sort((a,b)=>b.rel-a.rel);
