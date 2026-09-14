@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DIPLAB — where whales exit</title>
+<style>
+  :root{--bg:#080b0a;--ink:#d7e2dc;--dim:#5f6b64;--grn:#57e39a;--amber:#ffcf5c;--red:#ff6b6b;--line:#17201c}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:'JetBrains Mono',ui-monospace,monospace;min-height:100vh}
+  .wrap{max-width:760px;margin:0 auto;padding:8vh 22px 60px}
+  .brand{font-size:clamp(40px,10vw,72px);font-weight:800;letter-spacing:3px;color:#fff}
+  .brand b{color:var(--grn)}
+  .tag{color:var(--dim);letter-spacing:1px;margin:6px 0 32px;font-size:13px}
+  .search{display:flex;border:1px solid #24302b;background:#0b100e;max-width:600px}
+  #q{flex:1;background:transparent;border:0;outline:0;color:var(--ink);font:400 15px 'JetBrains Mono',monospace;padding:14px;letter-spacing:.5px}
+  #q::placeholder{color:#3f4a44}
+  #go{background:transparent;border:0;border-left:1px solid #24302b;color:var(--grn);font:700 13px 'JetBrains Mono',monospace;letter-spacing:2px;padding:0 22px;cursor:pointer}
+  #go:hover{background:rgba(87,227,154,.08)}
+  #out{margin-top:34px;min-height:20px}
+  .status{color:var(--dim);font-size:13px;line-height:1.8;white-space:pre-wrap}
+  .status .g{color:var(--grn)}.status .r{color:var(--red)}
+  .load{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--grn);animation:p 1s infinite}
+  @keyframes p{0%,100%{opacity:.25}50%{opacity:1}}
+  .head{margin:6px 0 18px;font-size:13px;color:var(--dim)}
+  .head b{color:var(--ink)}
+  .alert{border:1px solid var(--red);color:var(--red);padding:14px;font-size:14px;letter-spacing:.5px}
+  .chart{margin:8px 0 20px;border:1px solid var(--line);padding:10px;background:#0a0f0d}
+  .map{position:relative;border-left:1px solid var(--line);margin:10px 0 0 6px;padding-left:0}
+  .row{display:flex;align-items:center;gap:12px;padding:7px 0;font-size:13px}
+  .bar{height:10px;border-radius:2px}
+  .above .bar{background:var(--amber)} .below .bar{background:var(--red)}
+  .cur{color:var(--grn);border-top:1px dashed var(--grn);padding-top:8px;margin-top:8px;font-size:12px;letter-spacing:1px}
+  .lvl{color:var(--ink)} .sub{color:var(--dim);font-size:11px}
+  .disc{color:var(--dim);font-size:11px;margin-top:12px;line-height:1.6;font-style:italic}
+  .foot{color:var(--dim);font-size:11px;margin-top:26px;line-height:1.7;border-top:1px solid var(--line);padding-top:14px}
+</style></head>
+<body><div class="wrap">
+  <div class="brand">DIP<b>LAB</b></div>
+  <div class="tag">the map of levels where whales exit — read-only, on-chain</div>
+  <div class="search">
+    <input id="q" autocomplete="off" spellcheck="false" placeholder="paste a token contract address (0x…)">
+    <button id="go">RESOLVE</button>
+  </div>
+  <div id="out"></div>
+  <div class="foot">DIPLAB reads how each top holder behaved across past tokens, projects their exit onto this one, and maps the walls. It predicts no price and holds no key. Read-only.</div>
+</div>
+<script>
+const out=document.getElementById('q'), go=document.getElementById('go'), box=document.getElementById('out');
+function esc(s){return (s+'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+async function run(){
+  const t=out.value.trim().toLowerCase();
+  if(!/^0x[0-9a-f]{40}$/.test(t)){ box.innerHTML='<div class="status"><span class="r">[!]</span> that is not a token address (need 0x + 40 hex)</div>'; return; }
+  box.innerHTML='<div class="status"><span class="load"></span> reading the chain live… this runs live per token, ~10-20 sec.</div>';
+  try{
+    const r=await fetch('/api/analyze?token='+t); const d=await r.json();
+    if(d.error){ box.innerHTML='<div class="status"><span class="r">[!]</span> '+esc(d.error)+'</div>'; return; }
+    render(d);
+  }catch(e){ box.innerHTML='<div class="status"><span class="r">[!]</span> '+esc(e.message)+'</div>'; }
+}
+
+function drawChart(m, levels){
+  const c=m.candles||[]; const cur=m.price_usd;
+  if(!cur) return '';
+  const W=720,H=340,PADL=8,PADR=140,PADT=16,PADB=14;
+  const plotW=W-PADL-PADR;
+  const candleW=plotW*0.75, futX=PADL+candleW;      // 75% свечи, 25% зона стрелки
+  const lineEnd=W-PADR;                               // линии-стены — через ВЕСЬ график
+  // ценовой диапазон
+  let prices=[cur]; c.forEach(k=>prices.push(k[2],k[3])); levels.forEach(l=>prices.push(cur*l.rel));
+  levels.forEach(l=>prices.push(cur*l.rel*(1-(l.dip||0))));   // и точки отката
+  let pmin=Math.min(...prices), pmax=Math.max(...prices); if(pmin<=0)pmin=pmax/1000;
+  const lp=Math.log(pmin),hp=Math.log(pmax),span=(hp-lp)||1;
+  const y=p=>PADT+(hp-Math.log(Math.max(p,pmin)))/span*(H-PADT-PADB);
+  const n=Math.max(c.length,1), cw=Math.min(16, candleW/n*0.7);
+  let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">`;
+  // свечи (левые 75%)
+  c.slice().reverse().forEach((k,i)=>{
+    const [ts,o,h,l,cl]=k; const x=PADL+(i+0.5)*(candleW/n);
+    const up=cl>=o, col=up?'#57e39a':'#ff6b6b';
+    svg+=`<line x1="${x}" y1="${y(h)}" x2="${x}" y2="${y(l)}" stroke="${col}" stroke-width="1"/>`;
+    const yo=y(o),yc2=y(cl);
+    svg+=`<rect x="${x-cw/2}" y="${Math.min(yo,yc2)}" width="${cw}" height="${Math.max(1.5,Math.abs(yo-yc2))}" fill="${col}"/>`;
+  });
+  // линии-стены через ВЕСЬ график + текущая
+  const yCur=y(cur);
+  levels.forEach(l=>{
+    const p=cur*l.rel, yy=y(p), above=l.rel>=1, col=above?'#ffcf5c':'#ff6b6b';
+    svg+=`<line x1="${PADL}" y1="${yy}" x2="${lineEnd}" y2="${yy}" stroke="${col}" stroke-dasharray="6 4" stroke-width="${1+Math.min(3,l.supply_pct)}" opacity="0.9"/>`;
+  });
+  svg+=`<line x1="${PADL}" y1="${yCur}" x2="${lineEnd}" y2="${yCur}" stroke="#57e39a" stroke-dasharray="2 3" stroke-width="1"/>`;
+  // --- стрелка: углы САДЯТСЯ на линии. старт от текущей на границе свечей ---
+  const walls=levels.map(l=>({p:cur*l.rel,dip:l.dip||0})).sort((a,b)=>Math.abs(a.p-cur)-Math.abs(b.p-cur));
+  if(walls.length){
+    const steps=walls.length*2, slot=(lineEnd-futX)/(steps+1);
+    let pts=[[futX,yCur]], k=1;
+    walls.forEach(w=>{
+      pts.push([futX+slot*k, y(w.p)]); k++;                       // угол НА линии стены
+      pts.push([futX+slot*k, y(w.p*(1-w.dip))]); k++;             // откат на глубину дипа
+    });
+    const path='M '+pts.map(p=>p[0].toFixed(0)+' '+p[1].toFixed(0)).join(' L ');
+    svg+=`<path d="${path}" fill="none" stroke="#c9d4cd" stroke-width="1.6" stroke-dasharray="4 4" opacity="0.8"/>`;
+    for(let i=1;i<pts.length;i+=2){ svg+=`<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="3" fill="#c9d4cd"/>`; }  // касание стены
+    const [ex,ey]=pts[pts.length-1],[px,py]=pts[pts.length-2],ang=Math.atan2(ey-py,ex-px);
+    svg+=`<path d="M ${ex} ${ey} L ${(ex-9*Math.cos(ang-0.4)).toFixed(0)} ${(ey-9*Math.sin(ang-0.4)).toFixed(0)} M ${ex} ${ey} L ${(ex-9*Math.cos(ang+0.4)).toFixed(0)} ${(ey-9*Math.sin(ang+0.4)).toFixed(0)}" stroke="#c9d4cd" stroke-width="1.6" opacity="0.8"/>`;
+    svg+=`<text x="${futX+4}" y="${PADT-2}" fill="#8a958e" font-size="10" font-family="monospace">scenario →</text>`;
+  }
+  // --- подписи справа, разведённые по вертикали (без наезда) ---
+  let labels=levels.map(l=>({y:y(cur*l.rel), t:`$${(cur*l.rel).toPrecision(2)} · ${l.supply_pct.toFixed(1)}% · dip ~${((l.dip||0)*100).toFixed(0)}%`, col:l.rel>=1?'#ffcf5c':'#ff6b6b'}));
+  labels.push({y:yCur, t:`now $${cur.toPrecision(3)}`, col:'#57e39a'});
+  labels.sort((a,b)=>a.y-b.y);
+  const MIN=17; for(let i=1;i<labels.length;i++){ if(labels[i].y-labels[i-1].y<MIN) labels[i].y=labels[i-1].y+MIN; }
+  labels.forEach(L=>{ svg+=`<text x="${lineEnd+6}" y="${(L.y+3).toFixed(0)}" fill="${L.col}" font-size="10.5" font-family="monospace">${L.t}</text>`; });
+  svg+='</svg>';
+  return `<div class="chart">${svg}</div>`;
+}
+
+function render(d){
+  let h=`<div class="head">layer: <b>${d.migrated?'migrated V4 pool':'bonding curve'}</b> · holders read: <b>${d.holders_seen}</b> · readable whales: <b>${d.readable}</b> · bundled supply: <b>${d.bundle_pct}%</b></div>`;
+  if(d.alert){ box.innerHTML=h+`<div class="alert">⚠ ${esc(d.alert)}</div>`; return; }
+  if(!d.levels.length){ box.innerHTML=h+`<div class="status">no readable exit levels yet — most holders here have too little history to read. honest refusal, not a guess.</div>`; return; }
+  const above=d.levels.filter(l=>l.rel>=1).sort((a,b)=>b.rel-a.rel);
+  const below=d.levels.filter(l=>l.rel<1).sort((a,b)=>b.rel-a.rel);
+  const maxsup=Math.max(...d.levels.map(l=>l.supply_pct),0.5);
+  const rowHtml=(l)=>{const w=Math.max(8,l.supply_pct/maxsup*220);const pct=l.rel>=1?`+${((l.rel-1)*100).toFixed(0)}%`:`−${((1-l.rel)*100).toFixed(0)}%`;
+    const dip=(l.dip!=null)?` · dip ~${(l.dip*100).toFixed(0)}%`:'';
+    return `<div class="row ${l.rel>=1?'above':'below'}"><div class="bar" style="width:${w}px"></div><span class="lvl">${l.rel.toFixed(2)}x (${pct})</span><span class="sub">${l.wallets} whale${l.wallets>1?'s':''} · ${l.supply_pct.toFixed(1)}% supply${dip}</span></div>`;};
+  if(d.market&&d.market.price_usd){ h+=drawChart(d.market, d.levels); }
+  h+='<div class="map">';
+  above.forEach(l=>h+=rowHtml(l));
+  h+='<div class="cur">— current price —</div>';
+  below.forEach(l=>h+=rowHtml(l));
+  h+='</div>';
+  if(d.levels.some(l=>l.dip!=null)) h+='<div class="disc">dip depth is a mechanical estimate from current pool liquidity — a real dump can be deeper (panic). curve-phase tokens use the exact curve formula.</div>';
+  const bel=below.reduce((s,l)=>s+l.supply_pct,0);
+  if(bel>0) h+=`<div class="status" style="margin-top:16px">${bel.toFixed(1)}% of supply sits in whales who habitually exit <span class="r">below</span> current price — sell pressure under you.</div>`;
+  box.innerHTML=h;
+}
+go.onclick=run; out.addEventListener('keydown',e=>{if(e.key==='Enter')run()});
+</script></body></html>
