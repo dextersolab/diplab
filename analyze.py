@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 from statistics import median
 from dataclasses import dataclass, field
+import math
 import json
 from concurrent.futures import ThreadPoolExecutor
 import chain as ch
@@ -23,6 +24,8 @@ MAX_TRADES = 60      # последних сделок на кошелёк — �
 TARGET_READABLE = 8  # добираем холдеров, пока не наберём столько читаемых
 MAX_SCAN = 30        # но не сканируем больше стольких холдеров
 WORKERS = 20
+FRESH_MAX_TOKENS = 3     # wallet that has ever traded <=3 distinct coins counts as "fresh"
+DANGER_SCORE = 5         # score for withheld / not-analysable tokens (bundled or sybil cluster)
 CURVE_COMPLETED = "0xf8d37a90738ae063b8b8058b66f5880cf3cf7ab0c5d4fa78219696591dfbfb67"
 Q96 = 2 ** 96
 
@@ -101,6 +104,7 @@ class Result:
     score: int | None = None
     band: str | None = None
     whales: list = field(default_factory=list)
+    withheld: bool = False
 
 
 def _find_launch(bn, token):
@@ -201,10 +205,10 @@ def _habit(bn, holder, skip_token):
     now = _time.time()
     hit = _HABIT_CACHE.get(holder)
     if hit and now - hit[0] < _HABIT_TTL:
-        return hit[1], hit[2]
-    med, n = _habit_compute(bn, holder, skip_token)
-    _HABIT_CACHE[holder] = (now, med, n)
-    return med, n
+        return hit[1], hit[2], hit[3]
+    med, n, traded = _habit_compute(bn, holder, skip_token)
+    _HABIT_CACHE[holder] = (now, med, n, traded)
+    return med, n, traded
 
 
 def _habit_compute(bn, holder, skip_token):
@@ -249,7 +253,8 @@ def _habit_compute(bn, holder, skip_token):
         else:          pos[k]["qo"] += q; pos[k]["ti"] += amt
     m = [p["qo"] / p["qi"] for p in pos.values()
          if p["to"] > 0 and p["qi"] > 0 and p["ti"] / p["to"] >= 0.9]
-    return (median(m) if m else None), len(m)
+    traded = len({k[1] for k in pos})   # distinct token contracts this wallet actually traded
+    return (median(m) if m else None), len(m), traded
 
 
 
@@ -259,10 +264,6 @@ def analyze(token: str) -> Result:
     curve, lblock = _find_launch(bn, token)
     fallback = curve is None
     if fallback:
-        # Нет Pons-launch в окне (не Pons-кривая, другой quote, или старше окна).
-        # НЕ сдаёмся: холдеры берутся из Pons Portal API (launch не нужен), а привычки
-        # китов — из кросс-токенной истории самих кошельков. Теряем только точный
-        # блок запуска (берём окно WINDOW) и статус миграции/адрес кривой.
         lblock = bn - WINDOW
         migrated = False
     else:
@@ -270,46 +271,90 @@ def analyze(token: str) -> Result:
     TS = int(ch.rpc("eth_call", [{"to": token, "data": "0x18160ddd"}, "latest"]), 16)
     all_holders = _holders(bn, token, curve, lblock)[:MAX_SCAN]
     if not all_holders:
-        # реально нечего читать: и API пуст, и переводов в окне нет
         return Result(token, "unknown", False, 0.0,
-                      alert="no holders readable — token not indexed and no transfers found in window")
-    cur = _current_price(bn, token, curve, lblock)
+                      alert="no holders readable - token not indexed and no transfers found in window")
+    layer = "unknown" if fallback else ("v4" if migrated else "curve")
 
-    def work(item):
+    top = all_holders[:TOP_HOLDERS]
+
+    # --- PHASE 1 (cheap): buyer-detection on the top holders -> bundle share. ---
+    def buyer_check(item):
+        a, v = item
+        ep, is_buyer = _buys_of_token(bn, token, curve, lblock, a)
+        return {"addr": a, "sp": v / TS * 100, "buyer": is_buyer, "ep": ep}
+    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+        top_prof = list(ex.map(buyer_check, top))
+    n_top = len(top_prof)
+    bundle = round(sum(p["sp"] for p in top_prof if not p["buyer"]), 2)
+    res = Result(token, layer, migrated, bundle, readable=0, holders_seen=n_top)
+
+    # GATE 1 - bundled supply: not analysable. bail BEFORE any cross-token history
+    #          reads, which is what keeps bundled tokens fast.
+    if bundle >= BUNDLE_ALERT_PCT:
+        res.withheld = True
+        res.score, res.band = DANGER_SCORE, "DANGER"
+        res.alert = (f"{bundle:.1f}% of supply is held by bundler wallets among the top holders - "
+                     "not analysable, high rug risk. exit forecast withheld.")
+        return res
+
+    # --- PHASE 2: cross-token history of the top holders -> exit habit + how many
+    #     distinct coins each has ever traded (only runs when GATE 1 passed). ---
+    def enrich(p):
+        med, n, traded = _habit(bn, p["addr"], token)
+        p["med"] = med; p["n"] = n; p["traded"] = traded
+        return p
+    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+        top_prof = list(ex.map(enrich, top_prof))
+    fresh = sum(1 for p in top_prof if p["traded"] <= FRESH_MAX_TOKENS)
+    fresh_need = math.ceil(0.8 * n_top)       # 8 of 10; scales down for tokens with fewer holders
+
+    # GATE 2 - cluster of fresh wallets (one operator / sybil): not analysable.
+    if n_top >= 5 and fresh >= fresh_need:
+        res.withheld = True
+        res.score, res.band = DANGER_SCORE, "DANGER"
+        res.alert = (f"{fresh} of {n_top} top holders are fresh wallets that have only ever traded "
+                     f"{FRESH_MAX_TOKENS} coins or fewer - likely one operator / sybil cluster, "
+                     "high rug risk. exit forecast withheld.")
+        return res
+
+    # --- no gate: build the exit map. only now (past the gates) do we need the live
+    #     price - withheld tokens above never pay for this read. ---
+    cur = _current_price(bn, token, curve, lblock)
+    proj = []; whales_acc = []; readable = 0; scanned = n_top
+
+    def scan_rest(item):
         a, v = item
         ep, is_buyer = _buys_of_token(bn, token, curve, lblock, a)
         if not is_buyer:
-            return ("bundle", v / TS * 100, None)
-        med, n = _habit(bn, a, token)
-        if med is None or n < MIN_POSITIONS or ep is None or cur is None:
-            return ("skip", 0, None)
-        return ("level", (ep * med / cur, v / TS * 100), {"addr": a, "mult": round(med,2), "n": n, "supply_pct": round(v/TS*100,1), "exit_rel": round(ep*med/cur,2)})
+            return None
+        med, n, traded = _habit(bn, a, token)
+        return {"addr": a, "sp": v / TS * 100, "buyer": True, "ep": ep, "med": med, "n": n}
 
-    # сканируем холдеров пачками по убыванию доли, добирая до TARGET_READABLE читаемых
-    bundle = 0.0; proj = []; readable = 0; scanned = 0; whales_acc = []
+    def consume(prof):
+        nonlocal readable
+        if not prof or not prof.get("buyer"):
+            return
+        if prof.get("med") is None or prof.get("n", 0) < MIN_POSITIONS or prof.get("ep") is None or cur is None:
+            return
+        rel = prof["ep"] * prof["med"] / cur
+        proj.append((rel, prof["sp"])); readable += 1
+        whales_acc.append({"addr": prof["addr"], "mult": round(prof["med"], 2), "n": prof["n"],
+                           "supply_pct": round(prof["sp"], 1), "exit_rel": round(rel, 2)})
+
+    for p in top_prof:
+        consume(p)
+
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
         while scanned < len(all_holders) and readable < TARGET_READABLE:
             batch = all_holders[scanned:scanned + WORKERS]
-            idx0 = scanned
             scanned += len(batch)
-            for j, res_tuple in enumerate(ex.map(work, batch)):
-                kind = res_tuple[0]; payload = res_tuple[1]
-                is_top = (idx0 + j) < TOP_HOLDERS
-                if kind == "bundle" and is_top: bundle += payload
-                elif kind == "level":
-                    proj.append(payload); readable += 1
-                    whales_acc.append(res_tuple[2])
+            for prof in ex.map(scan_rest, batch):
+                consume(prof)
 
-    layer = "unknown" if fallback else ("v4" if migrated else "curve")
-    res = Result(token, layer, migrated, round(bundle, 2),
-                 readable=readable, holders_seen=scanned)
-    res.whales = whales_acc
+    res.readable = readable; res.holders_seen = scanned; res.whales = whales_acc
     if fallback:
-        # мягкая пометка: читали без launch-контекста (не блокирует дашборд)
-        res.alert = "read without Pons launch context — holders via portal, entry/migration data limited"
-    if bundle >= BUNDLE_ALERT_PCT:
-        res.alert = f"{bundle:.1f}% of supply held by bundlers among top holders — exit forecast withheld, high risk"
-        return res
+        res.alert = "read without Pons launch context - holders via portal, entry/migration data limited"
+
     proj.sort()
     for rel, sh in proj:
         if res.levels and rel <= res.levels[-1].rel * GROUP_WIDTH:
@@ -318,16 +363,12 @@ def analyze(token: str) -> Result:
         else:
             res.levels.append(Level(rel, sh, 1))
 
-    # концентрация топ-10
     top10 = sum(v for _, v in all_holders[:10]) / TS * 100 if TS else 0.0
     res.top10_pct = round(top10, 1)
-    # давление вниз: % сапплая китов, выходящих ниже текущей цены
     below = sum(sh for rel, sh in proj if rel < 1.0)
     res.exit_below_pct = round(below, 1)
     res.score, res.band = _score(res, proj)
-    # глубина дипа считается в сервисе из ликвидности пула (GeckoTerminal, стабильно)
     return res
-
 
 def _score(res, proj):
     """DIPLAB score 0-100 (100=чисто). EXIT(40)+BUNDLE(25)+CONCENTRATION(20)+DEPTH(15).

@@ -145,7 +145,7 @@ def run_cached(token):
             ratio = (lv["supply_pct"] / 100 * fdv) / (reserve / 2)
             lv["dip"] = 1 - (1 / (1 + ratio)) ** 2
     # DEPTH-компонент score по реальной ликвидности (заменяет базовые 7.5 из движка)
-    if reserve > 0 and d.get("score") is not None:
+    if reserve > 0 and d.get("score") is not None and not d.get("withheld"):
         depth_full = 15 * min(reserve / 50000, 1)          # 0..15 (50k+ = полный балл)
         sc = max(0, min(100, round(d["score"] - 7.5 + depth_full)))
         d["score"] = sc
