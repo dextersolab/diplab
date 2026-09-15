@@ -150,7 +150,7 @@ main{flex:1 0 auto;min-width:0}.ft{min-height:56px}footer{flex-shrink:0}
       <p class="sub">first chart direction predictor for Robinhood memecoins. DIPLAB reads how top holders traded before to call where they will exit - so you see the best spots to enter, accumulate and exit.</p>
       <div class="searchrow">
         <input id="ca" placeholder="&gt; paste a contract address - 0x..." spellcheck="false" onkeydown="if(event.key==='Enter')resolve()">
-        <button class="btn" onclick="resolve()">RESOLVE</button>
+        <button class="btn" onclick="resolve()">SCAN</button>
       </div>
       <div class="undersearch">
         <span>scan top holders live - predict where the chart goes - no wallet connect</span>
@@ -267,6 +267,7 @@ var P1="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAE2CAYAAADbMK+IAAEAAE
      red by red's dip; otherwise a short bounce up half the yellow's dip
      (only when the total drop is <=30%). Direction is decided by the walls,
      not hard-coded down. */
+function dangerPath(){ return [1.0, 0.62, 0.74, 0.30]; }  // withheld/DANGER: down -> small bounce -> down to the floor (illustrative rug shape)
 function scenarioPath(levels){
   if(!levels || !levels.length) return null;
   var reds=levels.filter(function(l){return l.rel<1;}).sort(function(a,b){return b.rel-a.rel;}); // nearest (highest) red first
@@ -309,7 +310,7 @@ function drawChart(R){
   var wallP=levels.map(function(l){return l.rel*price;});
   // scenario path is computed up-front so its extremes (a bounce or obryv can go
   // past the walls) are folded into the axis range and never clip off-chart.
-  var scen=(R.showScenario!==false)?scenarioPath(levels):null;
+  var scen=R.withheld?dangerPath():((R.showScenario!==false)?scenarioPath(levels):null);
   // axis: clamp only wild candle WICKS, but the range must always fit every wall + NOW.
   var closes=cs.map(function(c){return c[4];}).filter(isFinite).sort(function(a,b){return a-b;});
   var med=closes[Math.floor(closes.length/2)]||price;
@@ -383,7 +384,7 @@ function drawChart(R){
     // live at the walls' heights, and the tip sits in a gap between them, so this
     // clears them without the old upward nudge that collided with the wall above.
     var sign=netPct>0?'+':'';
-    H+='<div style="position:absolute;left:'+(tip[0]-2)+'%;top:'+tip[1]+'%;transform:translate(-100%,-50%);font-size:10px;letter-spacing:.5px;padding:3px 6px;background:'+lblCol+';color:#fff;white-space:nowrap">SCENARIO '+sign+netPct+'%</div>';
+    H+='<div style="position:absolute;left:'+(tip[0]-2)+'%;top:'+tip[1]+'%;transform:translate(-100%,-50%);font-size:10px;letter-spacing:.5px;padding:3px 6px;background:'+lblCol+';color:#fff;white-space:nowrap">'+(R.withheld?'LIKELY RUG':('SCENARIO '+sign+netPct+'%'))+'</div>';
   }
   return H;
 }
