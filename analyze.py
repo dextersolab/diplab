@@ -31,20 +31,20 @@ def _signed(x):
     return x - (1 << 256) if x >= (1 << 255) else x
 
 
-def _tail_logs(bn, topics, need=MAX_TRADES, floor_blocks=WINDOW, step=60_000):
-    """Последние ~need логов по фильтру, идём окнами С КОНЦА. Не тащим всю историю:
-    для кошелька-гиганта (миллионы переводов) get_logs за всё окно возвращал бы
-    миллионы логов только чтобы взять последние 30 — вместо этого сканируем узкими
-    окнами от текущего блока назад и останавливаемся, как только набрали need."""
-    out = []; hi = bn; floor = bn - floor_blocks; st = step
-    while hi > floor:
-        lo = max(hi - st, floor)
-        chunk = ch.get_logs(lo, hi, topics=topics)
-        out = chunk + out                       # более старые логи идут впереди
-        if len(out) >= need:
-            break
-        hi = lo - 1; st = min(st * 2, 500_000)  # окно пустое/редкое — расширяем шаг
-    return out[-need:]
+def _tail_logs(bn, topics, need=MAX_TRADES, floor_blocks=WINDOW, probe=3_000, address=None):
+    """Последние ~need логов по фильтру. ПРОБА-ПОТОМ-ПРЫЖОК:
+    1) пробуем крохотное окно в конце — у мега-активного кошелька (тысячи переводов)
+       оно уже содержит >need сделок, берём и выходим мгновенно;
+    2) если мало — берём весь остаток окна ОДНИМ запросом (у редкого кошелька логов
+       там мало -> быстро). Быстро и для гигантов, и для редких — без хождения по
+       десяткам пустых окон."""
+    hi = bn; floor = bn - floor_blocks
+    lo1 = max(hi - probe, floor)
+    head = ch.get_logs(lo1, hi, address=address, topics=topics)
+    if len(head) >= need:
+        return head[-need:]
+    rest = ch.get_logs(floor, lo1 - 1, address=address, topics=topics) if lo1 > floor else []
+    return (rest + head)[-need:]
 
 
 WETH_ADDR = "0x0bd7d308f8e1639fab988df18a8011f41eacad73"
@@ -142,7 +142,7 @@ def _holders(bn, token, curve, lblock):
 def _buys_of_token(bn, token, curve, lblock, holder):
     """(weth_per_token_entry, is_buyer) — покупки холдером этого токена, чеки батчем."""
     wt = ch.topic_for(holder)
-    logs = ch.get_logs(lblock, bn, address=token, topics=[ch.TRANSFER_TOPIC, None, wt])
+    logs = _tail_logs(bn, [ch.TRANSFER_TOPIC, None, wt], MAX_TRADES, address=token)
     txs = list({lg["transactionHash"] for lg in logs})
     receipts = {}
     for i in range(0, len(txs), 100):
