@@ -12,7 +12,7 @@ from statistics import median
 from dataclasses import dataclass, field
 import math
 import json
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as _CFTimeout
 import chain as ch
 
 WINDOW = 3_000_000
@@ -20,9 +20,11 @@ MIN_POSITIONS = 5
 BUNDLE_ALERT_PCT = 10.0
 GROUP_WIDTH = 1.25
 TOP_HOLDERS = 10
-MAX_TRADES = 60      # последних сделок на кошелёк — шире сэмпл, ловим завершённые позиции у активных ветеранов
-TARGET_READABLE = 8  # добираем холдеров, пока не наберём столько читаемых
+MAX_TRADES = 40      # последних сделок на кошелёк — шире сэмпл, ловим завершённые позиции у активных ветеранов
+TARGET_READABLE = 6  # добираем холдеров, пока не наберём столько читаемых
 MAX_SCAN = 30        # но не сканируем больше стольких холдеров
+SCAN_BUDGET = 22     # жёсткий потолок времени (сек) на всё чтение китов
+PHASE2_BUDGET = 12   # из них максимум столько на топ-10 (gate свежести)
 WORKERS = 20
 FRESH_MAX_TOKENS = 3     # wallet that has ever traded <=3 distinct coins counts as "fresh"
 DANGER_SCORE = 5         # score for withheld / not-analysable tokens (bundled or sybil cluster)
@@ -181,23 +183,28 @@ def _current_price(bn, token, curve, lblock):
     Шагаем окнами С КОНЦА и расширяемся, пока не наберём хватает свопов: активный
     токен наберёт 12 в первом же узком окне (быстро), а тихий (мало торговался
     недавно) — не отвалится с None, а найдёт цену чуть глубже в истории."""
-    prices = []
-    hi = bn; step = 60_000; floor = bn - 800_000
-    while hi > floor and len(prices) < 12:
+    prices = []; checked = 0
+    hi = bn; step = 60_000; floor = bn - 400_000
+    while hi > floor and len(prices) < 6 and checked < 40:
         lo = max(hi - step, floor)
+        txs = []
         for lg in ch.get_logs(lo, hi, address=token):
-            t = ch.parse_transfer(lg)
-            if not t:
-                continue
-            rc = ch.rpc("eth_getTransactionReceipt", [lg["transactionHash"]])
-            moved = sum(int(l["data"], 16) for l in rc["logs"]
-                        if (p := ch.parse_transfer(l)) and p["token"] == token)
-            q = ch.match_swap_quote(rc["logs"], moved)
-            if q > 0 and moved > 0:
-                prices.append(q / (moved / 1e18))
-            if len(prices) >= 12:
-                break
-        hi = lo - 1; step = min(step * 2, 300_000)   # окно пустое — шагаем шире
+            if ch.parse_transfer(lg):
+                txs.append(lg["transactionHash"])
+        txs = list(dict.fromkeys(txs))[: max(0, 40 - checked)]   # чеки одним батчем, с потолком
+        if txs:
+            for rc in ch.rpc_batch([("eth_getTransactionReceipt", [t]) for t in txs]):
+                checked += 1
+                if not rc:
+                    continue
+                moved = sum(int(l["data"], 16) for l in rc["logs"]
+                            if (p := ch.parse_transfer(l)) and p["token"] == token)
+                q = ch.match_swap_quote(rc["logs"], moved)
+                if q > 0 and moved > 0:
+                    prices.append(q / (moved / 1e18))
+                if len(prices) >= 6:
+                    break
+        hi = lo - 1; step = min(step * 2, 300_000)
     return median(prices) if prices else None
 
 
@@ -212,15 +219,17 @@ def _habit(bn, holder, skip_token):
 
 
 def _habit_compute(bn, holder, skip_token):
-    wt = ch.topic_for(holder); frm = bn - WINDOW
+    wt = ch.topic_for(holder)
     pos = defaultdict(lambda: {"qi": 0.0, "to": 0, "ti": 0, "qo": 0.0})
-    # --- кривая (дёшево, без чеков) ---
+    # --- кривая: ТОЛЬКО ХВОСТ (последние MAX_TRADES событий), как V4. Раньше здесь
+    # стоял get_logs на всё окно 3M блоков -> у активного кита с тысячами сделок
+    # тянуло всю историю и вешало скан. tail_logs берёт хвост окнами с конца. ---
     for role in ([ch.CURVE_BUY, wt], [ch.CURVE_BUY, None, wt]):
-        for lg in ch.get_logs(frm, bn, topics=role):
+        for lg in _tail_logs(bn, role, MAX_TRADES):
             d = lg["data"]; k = ("c", lg["address"].lower())
             pos[k]["qi"] += ch.u256(d, 0); pos[k]["to"] += ch.u256(d, 1)
     for role in ([ch.CURVE_SELL, wt], [ch.CURVE_SELL, None, wt]):
-        for lg in ch.get_logs(frm, bn, topics=role):
+        for lg in _tail_logs(bn, role, MAX_TRADES):
             d = lg["data"]; k = ("c", lg["address"].lower())
             pos[k]["ti"] += ch.u256(d, 0); pos[k]["qo"] += ch.u256(d, 1)
     # --- V4: последние MAX_TRADES переводов, чеки одним батчем ---
@@ -257,6 +266,31 @@ def _habit_compute(bn, holder, skip_token):
     return (median(m) if m else None), len(m), traded
 
 
+
+
+def _read_before(items, fn, deadline):
+    """Гоняем fn(item) параллельно, ЗАБИРАЕМ только тех, кто успел до deadline.
+    Зависших не ждём (дочитаются в фоне, но скан не блокируется). Кит, медленный
+    в чтении = активный трейдер с огромной историей -> не свежий и не критичен для
+    карты, так что бросить его безопасно. Это делает скан неубиваемым по времени."""
+    ex = ThreadPoolExecutor(max_workers=WORKERS)
+    futs = [ex.submit(fn, it) for it in items]
+    out = []
+    try:
+        for f in as_completed(futs, timeout=max(0.05, deadline - _time.time())):
+            try:
+                r = f.result()
+                if r is not None:
+                    out.append(r)
+            except Exception:
+                pass
+    except _CFTimeout:
+        pass
+    try:
+        ex.shutdown(wait=False, cancel_futures=True)
+    except TypeError:
+        ex.shutdown(wait=False)
+    return out
 
 
 def analyze(token: str) -> Result:
@@ -299,12 +333,12 @@ def analyze(token: str) -> Result:
 
     # --- PHASE 2: cross-token history of the top holders -> exit habit + how many
     #     distinct coins each has ever traded (only runs when GATE 1 passed). ---
+    _t0 = _time.time()                       # старт time-бюджета на чтение китов
     def enrich(p):
         med, n, traded = _habit(bn, p["addr"], token)
         p["med"] = med; p["n"] = n; p["traded"] = traded
         return p
-    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        top_prof = list(ex.map(enrich, top_prof))
+    top_prof = _read_before(top_prof, enrich, _t0 + PHASE2_BUDGET)   # не ждём зависших китов
     fresh = sum(1 for p in top_prof if p["traded"] <= FRESH_MAX_TOKENS)
     fresh_need = math.ceil(0.8 * n_top)       # 8 of 10; scales down for tokens with fewer holders
 
@@ -344,12 +378,13 @@ def analyze(token: str) -> Result:
     for p in top_prof:
         consume(p)
 
-    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        while scanned < len(all_holders) and readable < TARGET_READABLE:
-            batch = all_holders[scanned:scanned + WORKERS]
-            scanned += len(batch)
-            for prof in ex.map(scan_rest, batch):
-                consume(prof)
+    # добираем остальных китов, пока не наберём достаточно ИЛИ не выйдет общий бюджет.
+    # ни один медленный кит не может подвесить скан — дедлайн его отсечёт.
+    rest = all_holders[n_top:]
+    if rest and readable < TARGET_READABLE and _time.time() < _t0 + SCAN_BUDGET:
+        for prof in _read_before(rest, scan_rest, _t0 + SCAN_BUDGET):
+            consume(prof)
+        scanned = n_top + len(rest)
 
     res.readable = readable; res.holders_seen = scanned; res.whales = whales_acc
     if fallback:
