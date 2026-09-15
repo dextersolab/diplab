@@ -432,17 +432,16 @@ function render(R){show('result');
   /* chart */
   document.getElementById('plot').innerHTML=drawChart(R);
   /* score */
-  var bundleRisk = (R.bundle_pct||0) >= 10;   // engine withholds the forecast when >=10% of supply is bundled
-  var noRead = !bundleRisk && (R.score==null) && (!(R.levels||[]).length) && (!(R.whales||[]).length);
+  var withheld = !!R.withheld;   // engine flagged token not-analysable (bundled supply or fresh-wallet / sybil cluster)
+  var noRead = !withheld && (R.score==null) && (!(R.levels||[]).length) && (!(R.whales||[]).length);
   var band=R.band||'OK', bandCols={CLEAN:'#3fae7a',OK:'#e0a94c',RISKY:'#e0736b',DANGER:'#e0736b'},bc=bandCols[band]||'#5b7799';
   var endsEl=document.querySelector('.scorebox .ends');
   var noteStyle='font-size:12px;line-height:1.5;padding:2px 0;height:auto;border:0;flex:1 1 100%';
-  if(bundleRisk){
-    var bp=(R.bundle_pct||0).toFixed(1);
-    document.getElementById('r_score').textContent='--';
+  if(withheld){
+    document.getElementById('r_score').textContent=(R.score!=null?R.score:'--');
     document.getElementById('r_score').style.color='#e0736b';
-    var beB=document.getElementById('r_band');beB.textContent='HIGH RISK';beB.style.color='#e0736b';
-    document.getElementById('r_blocks').innerHTML='<div style="'+noteStyle+';color:#e0736b"><strong>'+bp+'% of supply sits in bundler wallets</strong> among the top holders, so the exit forecast is withheld - a bundled launch can be dumped at will. treat as high risk. market data below is live.</div>';
+    var beB=document.getElementById('r_band');beB.textContent=(R.band||'DANGER');beB.style.color='#e0736b';
+    document.getElementById('r_blocks').innerHTML='<div style="'+noteStyle+';color:#e0736b">'+(R.alert||'not analysable - high risk.')+' market data below is live.</div>';
     if(endsEl)endsEl.style.display='none';
   } else if(noRead){
     document.getElementById('r_score').textContent='--';
@@ -472,8 +471,8 @@ function render(R){show('result');
   var nearest=exits[0];
   var below=(R.exit_below_pct||0).toFixed(1);
   var vtxt;
-  if(bundleRisk){
-    vtxt=(R.bundle_pct||0).toFixed(1)+'% of supply is held in bundler wallets - the exit forecast is withheld because a bundled supply can be dumped all at once. treat this as high risk.';
+  if(withheld){
+    vtxt=(R.alert||'not analysable - high risk.');
   } else if(noRead || !exits.length){
     vtxt='no readable whales for this token yet - the exit map needs on-chain holder history, which is not available here. the price chart above is live.';
   } else {
@@ -481,7 +480,7 @@ function render(R){show('result');
     if(exits.length>=2)vtxt+=' Two walls at '+exits[0].rel.toFixed(2)+'x and '+exits[1].rel.toFixed(2)+'x carry most of it.';
   }
   document.getElementById('r_verdict').innerHTML=vtxt.replace('below','<strong>below</strong>');
-  if(bundleRisk){
+  if(withheld){
     // forecast withheld -> the exit-based kpis have nothing meaningful to show
     document.getElementById('r_sp').textContent='-';
     document.getElementById('r_nw').textContent='-';
