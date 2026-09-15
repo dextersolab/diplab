@@ -118,6 +118,8 @@ def _bump_scanned(token):
             pass
 CACHE_TTL = 300            # 5 min
 _lock = threading.Lock()
+MAX_CONCURRENT = int(os.environ.get("DIPLAB_MAX_CONCURRENT", "2"))  # макс. одновременных чтений чейна -> держит пик RPC/s под лимитом Alchemy
+_scan_sem = threading.BoundedSemaphore(MAX_CONCURRENT)
 
 def run_cached(token):
     token = token.lower().strip()
@@ -126,39 +128,43 @@ def run_cached(token):
         hit = CACHE.get(token)
         if hit and now - hit[0] < CACHE_TTL:
             return hit[1], True
-    res = analyze(token)
-    d = asdict(res)
-    d["levels"] = [asdict(l) for l in res.levels]
-    # market с GeckoTerminal иногда сбоит (rate-limit/таймаут) и возвращает пусто.
-    # ретраим пару раз — иначе график ложно покажет "NO MARKET CHART" при живых данных.
-    d["market"] = fetch_market(token)
-    for _ in range(2):
-        if d["market"].get("candles"):
-            break
-        time.sleep(1.0)
+    with _scan_sem:                      # <= MAX_CONCURRENT одновременно: пик RPC/s не пробивает лимит Alchemy
+        now = time.time()
+        with _lock:                      # пока ждали слот — токен мог уже закешироваться другим сканом
+            hit = CACHE.get(token)
+            if hit and now - hit[0] < CACHE_TTL:
+                return hit[1], True
+        res = analyze(token)
+        d = asdict(res)
+        d["levels"] = [asdict(l) for l in res.levels]
+        # market с GeckoTerminal иногда сбоит (rate-limit/таймаут) и возвращает пусто.
         d["market"] = fetch_market(token)
-    market_ok = bool(d["market"].get("candles"))
-    # стабильная глубина дипа: constant-product по реальной ликвидности пула
-    mk = d["market"]; reserve = mk.get("reserve_usd") or 0; fdv = mk.get("fdv_usd") or 0
-    if reserve > 0 and fdv > 0:
-        for lv in d["levels"]:
-            ratio = (lv["supply_pct"] / 100 * fdv) / (reserve / 2)
-            lv["dip"] = 1 - (1 / (1 + ratio)) ** 2
-    # DEPTH-компонент score по реальной ликвидности (заменяет базовые 7.5 из движка)
-    if reserve > 0 and d.get("score") is not None and not d.get("withheld"):
-        depth_full = 15 * min(reserve / 50000, 1)          # 0..15 (50k+ = полный балл)
-        sc = max(0, min(100, round(d["score"] - 7.5 + depth_full)))
-        d["score"] = sc
-        d["band"] = ("CLEAN" if sc >= 80 else "OK" if sc >= 60 else
-                     "RISKY" if sc >= 40 else "DANGER")
-    with _lock:
-        if market_ok:
-            CACHE[token] = (now, d)          # кешируем только полный результат;
-                                             # пустой график не отравляет кэш на 5 мин
-        RECENT[:] = [r for r in RECENT if r["token"] != token]      # дедуп
-        RECENT.insert(0, {"token": token, "pair": d.get("market", {}).get("pair"),
-                          "score": d.get("score"), "band": d.get("band"), "ts": int(now)})
-        del RECENT[30:]                                             # держим 30
+        for _ in range(2):
+            if d["market"].get("candles"):
+                break
+            time.sleep(1.0)
+            d["market"] = fetch_market(token)
+        market_ok = bool(d["market"].get("candles"))
+        # стабильная глубина дипа: constant-product по реальной ликвидности пула
+        mk = d["market"]; reserve = mk.get("reserve_usd") or 0; fdv = mk.get("fdv_usd") or 0
+        if reserve > 0 and fdv > 0:
+            for lv in d["levels"]:
+                ratio = (lv["supply_pct"] / 100 * fdv) / (reserve / 2)
+                lv["dip"] = 1 - (1 / (1 + ratio)) ** 2
+        # DEPTH-компонент score по реальной ликвидности
+        if reserve > 0 and d.get("score") is not None and not d.get("withheld"):
+            depth_full = 15 * min(reserve / 50000, 1)
+            sc = max(0, min(100, round(d["score"] - 7.5 + depth_full)))
+            d["score"] = sc
+            d["band"] = ("CLEAN" if sc >= 80 else "OK" if sc >= 60 else
+                         "RISKY" if sc >= 40 else "DANGER")
+        with _lock:
+            if market_ok:
+                CACHE[token] = (now, d)
+            RECENT[:] = [r for r in RECENT if r["token"] != token]
+            RECENT.insert(0, {"token": token, "pair": d.get("market", {}).get("pair"),
+                              "score": d.get("score"), "band": d.get("band"), "ts": int(now)})
+            del RECENT[30:]
     _bump_scanned(token)
     return d, False
 
