@@ -120,6 +120,7 @@ CACHE_TTL = 300            # 5 min
 _lock = threading.Lock()
 MAX_CONCURRENT = int(os.environ.get("DIPLAB_MAX_CONCURRENT", "2"))  # макс. одновременных чтений чейна -> держит пик RPC/s под лимитом Alchemy
 _scan_sem = threading.BoundedSemaphore(MAX_CONCURRENT)
+ENGINE_VERSION = "v6-deadline-pricefix-20260915"  # штамп версии: видно в /api/result, чтобы точно знать что задеплоено
 
 def run_cached(token):
     token = token.lower().strip()
@@ -127,6 +128,7 @@ def run_cached(token):
     with _lock:
         hit = CACHE.get(token)
         if hit and now - hit[0] < CACHE_TTL:
+            hit[1]["ver"] = ENGINE_VERSION
             return hit[1], True
     with _scan_sem:                      # <= MAX_CONCURRENT одновременно: пик RPC/s не пробивает лимит Alchemy
         now = time.time()
@@ -165,6 +167,7 @@ def run_cached(token):
             RECENT.insert(0, {"token": token, "pair": d.get("market", {}).get("pair"),
                               "score": d.get("score"), "band": d.get("band"), "ts": int(now)})
             del RECENT[30:]
+    d["ver"] = ENGINE_VERSION
     _bump_scanned(token)
     return d, False
 
