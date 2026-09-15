@@ -220,17 +220,18 @@ def _habit(bn, holder, skip_token):
 
 
 def _habit_compute(bn, holder, skip_token):
-    wt = ch.topic_for(holder)
+    wt = ch.topic_for(holder); frm = bn - WINDOW
     pos = defaultdict(lambda: {"qi": 0.0, "to": 0, "ti": 0, "qo": 0.0})
-    # --- кривая: ТОЛЬКО ХВОСТ (последние MAX_TRADES событий), как V4. Раньше здесь
-    # стоял get_logs на всё окно 3M блоков -> у активного кита с тысячами сделок
-    # тянуло всю историю и вешало скан. tail_logs берёт хвост окнами с конца. ---
+    # --- кривая: один get_logs на роль по всему окну. На мигрировавших токенах у
+    # холдера тут пусто -> запрос возвращается мгновенно (одним вызовом). Прежняя
+    # попытка читать "хвостом" на пустой кривой расширяла окно и делала десятки
+    # пустых get_logs на каждого холдера -> сотни лишних запросов и тормоза. ---
     for role in ([ch.CURVE_BUY, wt], [ch.CURVE_BUY, None, wt]):
-        for lg in _tail_logs(bn, role, MAX_TRADES):
+        for lg in ch.get_logs(frm, bn, topics=role):
             d = lg["data"]; k = ("c", lg["address"].lower())
             pos[k]["qi"] += ch.u256(d, 0); pos[k]["to"] += ch.u256(d, 1)
     for role in ([ch.CURVE_SELL, wt], [ch.CURVE_SELL, None, wt]):
-        for lg in _tail_logs(bn, role, MAX_TRADES):
+        for lg in ch.get_logs(frm, bn, topics=role):
             d = lg["data"]; k = ("c", lg["address"].lower())
             pos[k]["ti"] += ch.u256(d, 0); pos[k]["qo"] += ch.u256(d, 1)
     # --- V4: последние MAX_TRADES переводов, чеки одним батчем ---

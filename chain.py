@@ -37,9 +37,11 @@ def _is_rate_limited(body):
             return False
         code = err.get("code")
         msg = str(err.get("message", "")).lower()
+        # ТОЛЬКО настоящие признаки rate-limit. НЕ матчим "exceeded"/"too many"/
+        # "capacity" — они есть в ошибке размера окна, которую get_logs обрабатывает
+        # разбивкой. Иначе ретрай зря крутит эти запросы по 5 раз -> скан висит.
         return code == 429 or any(k in msg for k in (
-            "rate limit", "rate-limit", "429", "exceeded", "capacity",
-            "throughput", "too many requests", "over compute", "compute units"))
+            "rate limit", "rate-limit", "per second", "too many requests"))
     if isinstance(body, dict) and "error" in body:
         return hit(body["error"])
     if isinstance(body, list):
