@@ -21,7 +21,8 @@ BUNDLE_ALERT_PCT = 10.0
 GROUP_WIDTH = 1.25
 TOP_HOLDERS = 10
 MAX_TRADES = 40      # последних сделок на кошелёк — шире сэмпл, ловим завершённые позиции у активных ветеранов
-TARGET_READABLE = 6  # добираем холдеров, пока не наберём столько читаемых
+TARGET_READABLE = 6
+MIN_READABLE_FOR_SCORE = 3   # меньше стольких прочитанных китов -> НЕ выставляем скор (тонкий рид = "no read", не ложное CLEAN)  # добираем холдеров, пока не наберём столько читаемых
 MAX_SCAN = 30        # но не сканируем больше стольких холдеров
 SCAN_BUDGET = 22     # жёсткий потолок времени (сек) на всё чтение китов
 PHASE2_BUDGET = 12   # из них максимум столько на топ-10 (gate свежести)
@@ -387,6 +388,13 @@ def analyze(token: str) -> Result:
         scanned = n_top + len(rest)
 
     res.readable = readable; res.holders_seen = scanned; res.whales = whales_acc
+    # THIN / FAILED READ GUARD: нет живой цены ИЛИ прочитано слишком мало китов ->
+    # честно оценить токен нельзя. Оставляем БЕЗ скора, фронт покажет "no read",
+    # а не ложно-чистое число (штраф EXIT срабатывает только на прочитанных китах).
+    if cur is None or readable < MIN_READABLE_FOR_SCORE:
+        res.whales = []
+        res.score = None; res.band = None
+        return res
     if fallback:
         res.alert = "read without Pons launch context - holders via portal, entry/migration data limited"
 
