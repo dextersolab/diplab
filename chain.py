@@ -3,7 +3,7 @@
 Адаптивное окно getLogs (делим пополам при отказе) — из radar/GEMHOG.
 Read-only: ни ключей, ни подписи, ни отправки транзакций.
 """
-import os, time, json, urllib.request
+import os, time, json, random, urllib.request
 
 RPC = os.environ["DIPLAB_RPC"]  # Alchemy PAYG endpoint
 
@@ -30,18 +30,54 @@ CURVE_SELL = "0x8113d738abdcb6b38357e9d53a54a7157861a09031b453651f0fe7fe151f59df
 def u256(data, i):
     return int(data[2 + i*64 : 2 + (i+1)*64], 16)
 
-def _post(payload):
-    req = urllib.request.Request(RPC, data=json.dumps(payload).encode(),
-                                 headers={"content-type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=40) as r:
-            return json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        # нода отдаёт JSON-ошибку даже с кодом 4xx — читаем тело
+def _is_rate_limited(body):
+    """True, если ответ ноды = rate-limit / превышение пропускной способности."""
+    def hit(err):
+        if not isinstance(err, dict):
+            return False
+        code = err.get("code")
+        msg = str(err.get("message", "")).lower()
+        return code == 429 or any(k in msg for k in (
+            "rate limit", "rate-limit", "429", "exceeded", "capacity",
+            "throughput", "too many requests", "over compute", "compute units"))
+    if isinstance(body, dict) and "error" in body:
+        return hit(body["error"])
+    if isinstance(body, list):
+        return any(isinstance(x, dict) and hit(x.get("error", {})) for x in body)
+    return False
+
+def _post(payload, _tries=5):
+    """POST с ретраями и бэкоффом при rate-limit/сбое: один отбитый запрос
+    во время нагрузки не должен ронять весь скан."""
+    last = None
+    for a in range(_tries):
+        req = urllib.request.Request(RPC, data=json.dumps(payload).encode(),
+                                     headers={"content-type": "application/json"})
         try:
-            return json.loads(e.read())
-        except Exception:
+            with urllib.request.urlopen(req, timeout=40) as r:
+                body = json.loads(r.read())
+            if _is_rate_limited(body) and a < _tries - 1:
+                last = body; time.sleep(0.35 * (2 ** a) + random.random() * 0.3); continue
+            return body
+        except urllib.error.HTTPError as e:
+            try:
+                body = json.loads(e.read())
+            except Exception:
+                body = None
+            if (e.code == 429 or (body is not None and _is_rate_limited(body))) and a < _tries - 1:
+                last = body if body is not None else e
+                time.sleep(0.35 * (2 ** a) + random.random() * 0.3); continue
+            if body is not None:
+                return body
             raise
+        except Exception as e:
+            last = e
+            if a < _tries - 1:
+                time.sleep(0.35 * (2 ** a) + random.random() * 0.3); continue
+            raise
+    if isinstance(last, Exception):
+        raise last
+    return last if last is not None else {}
 
 def rpc(method, params):
     d = _post({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
