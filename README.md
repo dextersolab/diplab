@@ -11,8 +11,7 @@ so you see the best spots to enter, accumulate and exit.
 <img src="https://img.shields.io/badge/signing-none-e0736b?style=flat-square&labelColor=0a0a0a" alt="no signing" />
 <img src="https://img.shields.io/badge/runtime_deps-0-9aa0a6?style=flat-square&labelColor=0a0a0a" alt="zero dependencies" />
 <img src="https://img.shields.io/badge/python-3.12-4a86c8?style=flat-square&labelColor=0a0a0a" alt="python 3.12" />
-<img src="https://img.shields.io/badge/chart_direction-81.7%25-3fae7a?style=flat-square&labelColor=0a0a0a" alt="chart direction 81.7%" />
-<img src="https://img.shields.io/badge/rug_detection-98.3%25-e0736b?style=flat-square&labelColor=0a0a0a" alt="rug detection 98.3%" />
+<img src="https://img.shields.io/badge/direction_accuracy-85%25-3fae7a?style=flat-square&labelColor=0a0a0a" alt="direction accuracy 85%" />
 <img src="https://img.shields.io/badge/license-MIT-e0a94c?style=flat-square&labelColor=0a0a0a" alt="MIT" />
 
 ![DIPLAB](banner.jpg)
@@ -27,7 +26,7 @@ reading the chart.
 DIPLAB answers one question: **where does this chart go next, and where do the
 people holding it get out?**
 
-> **Backtested across thousands of scans - 81.7% on chart direction · 98.3% on rug detection.** Each token was checked one at a time; full methodology in [Backtest](#backtest) below.
+> **85% direction accuracy across 40 backtested scans** (34/40 calls correct) - each token scanned before the move, every case reproducible. Full log: [backtest.md](backtest.md).
 
 ## The read
 
@@ -54,27 +53,27 @@ SWARM / WETH   ·   migrated V4 pool   ·   bundled supply 9.51%   ·   EXIT-RIS
 ```
 
 This is a real read, captured live. **SWARM played out exactly this way** - the
-chart walked down through the levels almost to the line. DIPLAB has been run
-across thousands of scans, and it reads the next few hours of a chart with high
+chart walked down through the levels almost to the line. DIPLAB has been
+backtested on real scans, and it reads the next few hours of a chart with high
 accuracy, because it is not reading the chart at all - it is reading the people
 who move it.
 
 ## Backtest
 
-DIPLAB has been backtested across thousands of scans, one token at a time -
-each address pulled individually, read against live on-chain state, and the
-call checked against what the chart actually did next.
+DIPLAB has been backtested on **40 real scans**, one token at a time - each
+scanned *before* the price move, with no future data, and the called direction
+compared against what the chart actually did next on-chain.
 
-- **81.7%** on chart direction - where the scenario arrow pointed vs. where the
-  chart actually walked over the following hours.
-- **98.3%** on rug detection - tokens flagged DANGER (bundled supply, or a
-  cluster of fresh / sybil wallets) that went on to rug or bleed out.
+- **85% direction accuracy** - 34 of 40 calls correct.
+- up-moves called right: **21 / 26** (81%). down-moves called right: **13 / 14** (93%).
 
-Each case was checked by hand: token scanned, verdict recorded, outcome
-verified on-chain afterward. And because the engine is deterministic - the same
-token at the same block always returns the same read - the results are
-reproducible: run the same addresses through DIPLAB and you get the same calls.
-A full case-by-case table is being compiled and will be published here.
+Because the engine is deterministic - the same token at the same block always
+returns the same read - every case is reproducible: run the address through
+DIPLAB at the listed block and you get the same call. The full case-by-case log
+is in **[backtest.md](backtest.md)**.
+
+This backtest measures **chart direction**. The DANGER verdict (bundled supply /
+sybil-cluster flagging) is a separate capability and is not scored in this run.
 
 ## Why the trader is invisible
 
