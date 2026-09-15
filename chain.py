@@ -153,6 +153,7 @@ def classify_leg(t, market):
 
 V4_SWAP_TOPIC = "0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f"
 V4_POOL_MGR   = "0x8366a39cc670b4001a1121b8f6a443a643e40951"
+WETH_ADDR     = "0x0bd7d308f8e1639fab988df18a8011f41eacad73"
 def _signed(x): return x-(1<<256) if x>=(1<<255) else x
 
 def match_swap_quote(receipt_logs, tok_amount):
@@ -171,4 +172,12 @@ def match_swap_quote(receipt_logs, tok_amount):
             if tok_side<=0: continue
             err=abs(tok_side-tok_amount)/tok_amount
             if err<best_err: best_err=err; best=quote_side
-    return best or 0
+    if best:
+        return best
+    # FALLBACK: пул, чьё событие свопа мы не декодим (не наш pool manager / другой AMM).
+    # Сторона котировки = крупнейший перевод WETH в этой же транзакции. DEX-независимо,
+    # поэтому цена читается и на незнакомых пулах, а не падает в None.
+    weth = [int(l["data"], 16) for l in receipt_logs
+            if (p := parse_transfer(l)) and p["token"] == WETH_ADDR]
+    weth = [a for a in weth if a > 0]
+    return max(weth) if weth else 0
