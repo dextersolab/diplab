@@ -460,11 +460,11 @@ function render(R){show('result');
   }
   /* stats */
   function sv(c){return 'font-family:\'Press Start 2P\',monospace;font-size:12px;color:'+(c||'#2b3f5c')+'';}
-  var st=[['bundle %',(R.bundle_pct||0).toFixed(1)+'%','#e0a94c'],['top-10 concentration',(R.top10_pct||0).toFixed(1)+'%','#e0a94c'],['exit-below-price %',(R.exit_below_pct||0).toFixed(1)+'%','#e0736b'],['readable whales',(R.readable||0)+' / '+(R.holders_seen||0),''],['FDV',fmtUsd(m.fdv_usd||0),''],['liquidity',fmtUsd(m.reserve_usd||0),''],['24h volume',fmtUsd(m.volume_24h||0),''],['age',(m.age_h||0).toFixed(1)+'h','']];
+  var st=[['bundle %',(R.bundle_pct||0).toFixed(1)+'%','#e0a94c'],['top-10 concentration',(R.top10_pct||0).toFixed(1)+'%','#e0a94c'],['exit-below-price %',(R.exit_below_pct||0).toFixed(1)+'%','#e0736b'],['FDV',fmtUsd(m.fdv_usd||0),''],['liquidity',fmtUsd(m.reserve_usd||0),''],['24h volume',fmtUsd(m.volume_24h||0),''],['age',(m.age_h||0).toFixed(1)+'h','']];
   document.getElementById('r_stats').innerHTML=st.map(function(r){return '<div class="strow"><span class="mut">'+r[0]+'</span><b style="'+sv(r[2])+'">'+r[1]+'</b></div>';}).join('');
   /* whales */
   var ws=(R.whales||[]).slice(0,8);
-  document.getElementById('r_whint').textContent=(R.readable||0)+' of '+(R.holders_seen||0)+' holders readable - multiple = where they usually exit vs entry.';
+  document.getElementById('r_whint').textContent='multiple = where a wallet usually sells vs where it bought, from its past trades - e.g. 2.0x means it tends to exit around double its entry price.';
   document.getElementById('r_whales').innerHTML=ws.map(function(w){var down=w.mult<1;var ms='font-size:11px;font-weight:700;padding:3px 7px;border:1px solid '+(down?'#f2c9c5':'#c4e5d5')+';background:'+(down?'#fdf3f2':'#f2fbf7')+';color:'+(down?'#e0736b':'#3fae7a');
     return '<div class="wrow"><span class="addr">'+(w.addr?w.addr.slice(0,6)+'...'+w.addr.slice(-4):'')+'</span><span style="'+ms+'">'+w.mult.toFixed(2)+'x</span><span class="sp">'+(w.supply_pct||0).toFixed(1)+'%</span></div>';}).join('');
   /* verdict + kpis */
