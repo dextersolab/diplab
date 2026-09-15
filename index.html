@@ -475,7 +475,7 @@ function render(R){show('result');
     document.getElementById('r_score').textContent='--';
     document.getElementById('r_score').style.color='#9db4cc';
     var beN=document.getElementById('r_band');beN.textContent='NO READ';beN.style.color='#9db4cc';
-    document.getElementById('r_blocks').innerHTML='<div style="'+noteStyle+';color:#5b7799">on-chain read unavailable - couldn't read enough of this token's holders or its live price to score it. this is NOT a clean verdict - treat with caution. market data (price, chart, FDV) below is still live.</div>';
+    document.getElementById('r_blocks').innerHTML='<div style="'+noteStyle+';color:#5b7799">on-chain read unavailable - could not read enough of the holders or the live price to score this token. this is NOT a clean verdict - treat with caution. market data (price, chart, FDV) below is still live.</div>';
     if(endsEl)endsEl.style.display='none';
   } else {
     document.getElementById('r_score').textContent=R.score!=null?R.score:'-';
