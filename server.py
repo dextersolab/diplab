@@ -120,7 +120,9 @@ CACHE_TTL = 300            # 5 min
 _lock = threading.Lock()
 MAX_CONCURRENT = int(os.environ.get("DIPLAB_MAX_CONCURRENT", "2"))  # макс. одновременных чтений чейна -> держит пик RPC/s под лимитом Alchemy
 _scan_sem = threading.BoundedSemaphore(MAX_CONCURRENT)
-ENGINE_VERSION = "v6-deadline-pricefix-20260915"  # штамп версии: видно в /api/result, чтобы точно знать что задеплоено
+import concurrent.futures as _cf
+ENGINE_VERSION = "v7-hardcap-20260915"  # штамп версии: видно в /api/result
+HARD_JOB_LIMIT = 24   # жёсткий потолок (сек) на ВЕСЬ скан. Дольше -> "busy", не виснем.
 
 def run_cached(token):
     token = token.lower().strip()
@@ -172,13 +174,29 @@ def run_cached(token):
     return d, False
 
 def _run_job(token):
+    # ЖЁСТКИЙ ПОТОЛОК на весь скан: что бы движок ни делал (детект/цена/киты), сервер
+    # обязан ответить за HARD_JOB_LIMIT сек. Затянулось (RPC перегружен) -> отдаём мягкий
+    # "busy", а не вечную загрузку. Фоновый скан дочитается и закеширует сам, поэтому
+    # повторный запрос обычно уже мгновенный из кэша.
+    ex = _cf.ThreadPoolExecutor(max_workers=1)
+    fut = ex.submit(run_cached, token)
     try:
-        d, _ = run_cached(token)
+        d, _ = fut.result(timeout=HARD_JOB_LIMIT)
         with _lock:
             JOBS[token] = {"status": "done", "data": d, "ts": time.time()}
+    except _cf.TimeoutError:
+        with _lock:
+            JOBS[token] = {"status": "done", "data": {
+                "token": token, "score": None, "band": None, "levels": [], "whales": [],
+                "readable": 0, "holders_seen": 0, "withheld": False, "bundle_pct": 0.0,
+                "top10_pct": 0.0, "exit_below_pct": 0.0, "market": {}, "ver": ENGINE_VERSION,
+                "alert": "scan is busy (high RPC load) - try again in a few seconds"},
+                "ts": time.time()}
     except Exception as e:
         with _lock:
             JOBS[token] = {"status": "error", "error": str(e), "ts": time.time()}
+    finally:
+        ex.shutdown(wait=False)
 
 
 def start_job(token):
