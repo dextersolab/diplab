@@ -432,19 +432,31 @@ function render(R){show('result');
   /* chart */
   document.getElementById('plot').innerHTML=drawChart(R);
   /* score */
-  var noRead = (R.score==null) && (!(R.levels||[]).length) && (!(R.whales||[]).length);
+  var bundleRisk = (R.bundle_pct||0) >= 10;   // engine withholds the forecast when >=10% of supply is bundled
+  var noRead = !bundleRisk && (R.score==null) && (!(R.levels||[]).length) && (!(R.whales||[]).length);
   var band=R.band||'OK', bandCols={CLEAN:'#3fae7a',OK:'#e0a94c',RISKY:'#e0736b',DANGER:'#e0736b'},bc=bandCols[band]||'#5b7799';
-  if(noRead){
+  var endsEl=document.querySelector('.scorebox .ends');
+  var noteStyle='font-size:12px;line-height:1.5;padding:2px 0;height:auto;border:0;flex:1 1 100%';
+  if(bundleRisk){
+    var bp=(R.bundle_pct||0).toFixed(1);
+    document.getElementById('r_score').textContent='--';
+    document.getElementById('r_score').style.color='#e0736b';
+    var beB=document.getElementById('r_band');beB.textContent='HIGH RISK';beB.style.color='#e0736b';
+    document.getElementById('r_blocks').innerHTML='<div style="'+noteStyle+';color:#e0736b"><strong>'+bp+'% of supply sits in bundler wallets</strong> among the top holders, so the exit forecast is withheld - a bundled launch can be dumped at will. treat as high risk. market data below is live.</div>';
+    if(endsEl)endsEl.style.display='none';
+  } else if(noRead){
     document.getElementById('r_score').textContent='--';
     document.getElementById('r_score').style.color='#9db4cc';
     var beN=document.getElementById('r_band');beN.textContent='NO READ';beN.style.color='#9db4cc';
-    document.getElementById('r_blocks').innerHTML='<div style="grid-column:1/-1;font-size:12px;line-height:1.5;color:#5b7799;padding:2px 0">on-chain read unavailable for this token - it is not a Pons v2 launch, or it is too old to read in the on-chain window. market data (price, chart, FDV) below is still live.</div>';
+    document.getElementById('r_blocks').innerHTML='<div style="'+noteStyle+';color:#5b7799">on-chain read unavailable for this token - it is not a Pons v2 launch, or it is too old to read in the on-chain window. market data (price, chart, FDV) below is still live.</div>';
+    if(endsEl)endsEl.style.display='none';
   } else {
     document.getElementById('r_score').textContent=R.score!=null?R.score:'-';
     var be=document.getElementById('r_band');be.textContent=band;be.style.color=bc;
     document.getElementById('r_score').style.color=bc;
     var bl='';for(var i=0;i<20;i++){bl+='<div style="background:'+(i<Math.round((R.score||0)/5)?bc:'#f7fbfe')+'"></div>';}
     document.getElementById('r_blocks').innerHTML=bl;
+    if(endsEl)endsEl.style.display='';
   }
   /* stats */
   function sv(c){return 'font-family:\'Press Start 2P\',monospace;font-size:12px;color:'+(c||'#2b3f5c')+'';}
@@ -460,22 +472,31 @@ function render(R){show('result');
   var nearest=exits[0];
   var below=(R.exit_below_pct||0).toFixed(1);
   var vtxt;
-  if(noRead || !exits.length){
+  if(bundleRisk){
+    vtxt=(R.bundle_pct||0).toFixed(1)+'% of supply is held in bundler wallets - the exit forecast is withheld because a bundled supply can be dumped all at once. treat this as high risk.';
+  } else if(noRead || !exits.length){
     vtxt='no readable whales for this token yet - the exit map needs on-chain holder history, which is not available here. the price chart above is live.';
   } else {
     vtxt=below+'% of supply sits in whales who habitually exit below current price - sell pressure under you.';
     if(exits.length>=2)vtxt+=' Two walls at '+exits[0].rel.toFixed(2)+'x and '+exits[1].rel.toFixed(2)+'x carry most of it.';
   }
   document.getElementById('r_verdict').innerHTML=vtxt.replace('below','<strong>below</strong>');
-  document.getElementById('r_sp').textContent=below+'% supply';
-  document.getElementById('r_nw').textContent=nearest?(nearest.rel.toFixed(2)+'x - $'+(nearest.rel*m.price_usd).toFixed(m.price_usd<0.001?6:5)):'-';
-  // SCENARIO kpi mirrors the chart arrow: net endpoint from scenarioPath (up or down)
-  var scen=scenarioPath(R.levels||[]), sfEl=document.getElementById('r_sf');
-  if(scen && scen.length>1){
-    var endRel=scen[scen.length-1], net=Math.round((endRel-1)*100);
-    sfEl.textContent=(net>0?'+':'')+net+'% - $'+(endRel*m.price_usd).toFixed(m.price_usd<0.001?6:5);
-    sfEl.style.color=net>=0?'#3fae7a':'#e0736b';
-  } else { sfEl.textContent='-'; sfEl.style.color=''; }
+  if(bundleRisk){
+    // forecast withheld -> the exit-based kpis have nothing meaningful to show
+    document.getElementById('r_sp').textContent='-';
+    document.getElementById('r_nw').textContent='-';
+    var sfB=document.getElementById('r_sf'); sfB.textContent='-'; sfB.style.color='';
+  } else {
+    document.getElementById('r_sp').textContent=below+'% supply';
+    document.getElementById('r_nw').textContent=nearest?(nearest.rel.toFixed(2)+'x - $'+(nearest.rel*m.price_usd).toFixed(m.price_usd<0.001?6:5)):'-';
+    // SCENARIO kpi mirrors the chart arrow: net endpoint from scenarioPath (up or down)
+    var scen=scenarioPath(R.levels||[]), sfEl=document.getElementById('r_sf');
+    if(scen && scen.length>1){
+      var endRel=scen[scen.length-1], net=Math.round((endRel-1)*100);
+      sfEl.textContent=(net>0?'+':'')+net+'% - $'+(endRel*m.price_usd).toFixed(m.price_usd<0.001?6:5);
+      sfEl.style.color=net>=0?'#3fae7a':'#e0736b';
+    } else { sfEl.textContent='-'; sfEl.style.color=''; }
+  }
   /* feed */
   loadFeed();
 }
