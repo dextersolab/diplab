@@ -40,30 +40,38 @@ def fetch_market(token):
         pools = _gt(f"/tokens/{token}/pools").get("data", [])
         if not pools:
             return {}
-        # выбрать пул с максимальной ликвидностью (а не первый попавшийся —
-        # первый может быть пустым/битым, отдавать price=None и 0 свечей)
+        # перебрать пулы по убыванию ликвидности и взять ПЕРВЫЙ, у которого реально
+        # есть свечи (у токена может быть много пулов против разных quote-токенов —
+        # самый ликвидный обычно с графиком, но подстрахуемся перебором).
         def _liq(pl):
             try:
                 return float(pl["attributes"].get("reserve_in_usd") or 0)
             except Exception:
                 return 0.0
-        p = max(pools, key=_liq)
+        pools.sort(key=_liq, reverse=True)
+
+        def _ohlcv(pool_addr, res, lim):
+            return _gt(f"/pools/{pool_addr}/ohlcv/{res}?limit={lim}").get("data", {}).get("attributes", {}).get("ohlcv_list", [])
+
+        p = None; oc = []
+        for cand in pools[:5]:                    # не больше 5 попыток
+            addr = cand["attributes"]["address"]
+            try:
+                got = _ohlcv(addr, "minute", 120)
+            except Exception:
+                got = []
+            if len(got) < 5:
+                try:
+                    got = _ohlcv(addr, "hour", 48) or got
+                except Exception:
+                    pass
+            if len(got) >= 5:                     # нашли пул с графиком
+                p = cand; oc = got; break
+        if p is None:                             # ни у одного нет свечей — берём самый ликвидный как есть
+            p = pools[0]; oc = []
         pool = p["attributes"]["address"]
         price = float(p["attributes"].get("base_token_price_usd") or 0)
         name = p["attributes"].get("name", "")
-        # минутные свечи (~2ч истории); если минутных мало — фолбэк на часовые
-        def _ohlcv(res, lim):
-            return _gt(f"/pools/{pool}/ohlcv/{res}?limit={lim}").get("data", {}).get("attributes", {}).get("ohlcv_list", [])
-        oc = []
-        try:
-            oc = _ohlcv("minute", 120)
-        except Exception:
-            oc = []
-        if len(oc) < 5:
-            try:
-                oc = _ohlcv("hour", 48) or oc
-            except Exception:
-                pass
         candles = [[int(c[0]), float(c[1]), float(c[2]), float(c[3]), float(c[4])] for c in oc]  # ts,o,h,l,c
         vol = p["attributes"].get("volume_usd") or {}
         created = p["attributes"].get("pool_created_at")
@@ -121,7 +129,15 @@ def run_cached(token):
     res = analyze(token)
     d = asdict(res)
     d["levels"] = [asdict(l) for l in res.levels]
+    # market с GeckoTerminal иногда сбоит (rate-limit/таймаут) и возвращает пусто.
+    # ретраим пару раз — иначе график ложно покажет "NO MARKET CHART" при живых данных.
     d["market"] = fetch_market(token)
+    for _ in range(2):
+        if d["market"].get("candles"):
+            break
+        time.sleep(1.0)
+        d["market"] = fetch_market(token)
+    market_ok = bool(d["market"].get("candles"))
     # стабильная глубина дипа: constant-product по реальной ликвидности пула
     mk = d["market"]; reserve = mk.get("reserve_usd") or 0; fdv = mk.get("fdv_usd") or 0
     if reserve > 0 and fdv > 0:
@@ -136,7 +152,9 @@ def run_cached(token):
         d["band"] = ("CLEAN" if sc >= 80 else "OK" if sc >= 60 else
                      "RISKY" if sc >= 40 else "DANGER")
     with _lock:
-        CACHE[token] = (now, d)
+        if market_ok:
+            CACHE[token] = (now, d)          # кешируем только полный результат;
+                                             # пустой график не отравляет кэш на 5 мин
         RECENT[:] = [r for r in RECENT if r["token"] != token]      # дедуп
         RECENT.insert(0, {"token": token, "pair": d.get("market", {}).get("pair"),
                           "score": d.get("score"), "band": d.get("band"), "ts": int(now)})
