@@ -58,6 +58,8 @@ backtested on real scans, and it reads the next few hours of a chart with high
 accuracy, because it is not reading the chart at all - it is reading the people
 who move it.
 
+![DIPLAB](screen1.jpg)
+
 ## Backtest
 
 DIPLAB has been backtested on **40 real scans**, one token at a time - each
