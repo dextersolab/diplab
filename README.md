@@ -205,8 +205,3 @@ tells you.
 
 > the vision: the pre-trade check every Robinhood memecoin trader runs first -
 > and the radar that shows where smart money moves next.
-
-## Credits
-
-Approach and read-layer patterns studied from open Robinhood Chain
-repositories. MIT. Runs as a read on the chain, and holds nothing of yours.
