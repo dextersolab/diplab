@@ -177,6 +177,8 @@ tells you.
 
 ## Roadmap
 
+![DIPLAB](screen2.jpg)
+
 **◆ SHIPPING NOW**
 > quick wins on top of the live engine.
 - deeper scans - read the top 50 holders, not just the top 10
