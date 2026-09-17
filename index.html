@@ -433,7 +433,7 @@ function resolve(){var ca=document.getElementById('ca').value.trim();if(!/^0x[0-
 function rescan(){show('landing');document.getElementById('ca').focus();}
 function poll(){pollTimer=setInterval(function(){fetch(API+'/api/result?token='+CUR).then(function(r){return r.json();}).then(function(d){if(!d)return;if(d.status==='done'){clearInterval(pollTimer);finish(d);}else if(d.status==='error'){clearInterval(pollTimer);showLanding();alert(d.error||'launch not found - not a Pons v2 token, or too old to read in window');}});},2500);}
 function startLoading(){show('loading');done=false;result=null;loadStart=Date.now();
-  clearTimeout(window._hardStop);window._hardStop=setTimeout(function(){if(!done){clearInterval(pollTimer);clearInterval(loadTimer);show('landing');alert('still scanning under load - the read keeps running in the background, so a re-scan in a few seconds is usually instant. give it another go.');}},40000);
+  clearTimeout(window._hardStop);window._hardStop=setTimeout(function(){if(!done){clearInterval(pollTimer);clearInterval(loadTimer);show('landing');alert('still scanning under load - the read keeps running in the background, so a re-scan in a few seconds is usually instant. give it another go.');}},50000);
   var stages=['pulling top holders','tracing whale exits','mapping walls','scoring exit-risk'];
   clearInterval(loadTimer);
   loadTimer=setInterval(function(){var t=(Date.now()-loadStart)/1000;
