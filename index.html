@@ -190,16 +190,13 @@ main{flex:1 0 auto;min-width:0}.ft{min-height:56px}footer{flex-shrink:0}
        ENABLE: delete  style="display:none"  on the <section> below.
        CHART: uncomment the <iframe> and set <NETWORK> + <PAIR_ADDRESS>
               (Dexscreener PAIR address, not the token CA). ===== -->
-  <section class="sec" id="ticker" style="display:none">
+  <section class="sec" id="ticker">
     <h2 style="text-align:center">DIPLAB has a ticker</h2>
     <p class="lead" style="text-align:center;color:var(--orange);font-weight:700;letter-spacing:1px">$DIPLAB</p>
     <div class="tokgrid">
       <div class="tokchart">
-        <!-- LIVE CHART - uncomment on launch:
-        <iframe src="https://dexscreener.com/<NETWORK>/<PAIR_ADDRESS>?embed=1&theme=dark&info=0&trades=0"
-                style="width:100%;height:100%;border:0" title="DIPLAB live chart"></iframe>
-        -->
-        <div class="tokchart-ph">live chart loads here at launch</div>
+        <iframe src="https://dexscreener.com/robinhood/0x54d49a3f4eb733fc21388841f656f593e6f780f15a34b4a6e2e1cb52c0726188?embed=1&theme=light&info=0&trades=0" style="width:100%;height:480px;border:0;display:block" title="DIPLAB live chart"></iframe>
+        
       </div>
       <div class="labside">
         <div class="labside-inner">
