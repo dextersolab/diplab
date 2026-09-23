@@ -121,8 +121,8 @@ _lock = threading.Lock()
 MAX_CONCURRENT = int(os.environ.get("DIPLAB_MAX_CONCURRENT", "2"))  # макс. одновременных чтений чейна -> держит пик RPC/s под лимитом Alchemy
 _scan_sem = threading.BoundedSemaphore(MAX_CONCURRENT)
 import concurrent.futures as _cf
-ENGINE_VERSION = "v9-cap40-20260917"  # штамп версии: видно в /api/result
-HARD_JOB_LIMIT = 40   # жёсткий потолок (сек) на ВЕСЬ скан. Дольше -> "busy", не виснем.
+ENGINE_VERSION = "v10-freenode-20260923"  # штамп версии: видно в /api/result
+HARD_JOB_LIMIT = 55   # жёсткий потолок (сек) на ВЕСЬ скан. Дольше -> "busy", не виснем.
 
 def run_cached(token):
     token = token.lower().strip()
