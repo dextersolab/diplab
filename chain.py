@@ -3,7 +3,7 @@
 Адаптивное окно getLogs (делим пополам при отказе) — из radar/GEMHOG.
 Read-only: ни ключей, ни подписи, ни отправки транзакций.
 """
-import os, time, json, random, urllib.request
+import os, time, json, random, threading, urllib.request
 
 RPC = os.environ["DIPLAB_RPC"]  # Alchemy PAYG endpoint
 
@@ -48,11 +48,26 @@ def _is_rate_limited(body):
         return any(isinstance(x, dict) and hit(x.get("error", {})) for x in body)
     return False
 
+RPS = int(os.environ.get("DIPLAB_RPS", "8"))  # потолок запросов/сек глобально
+_MIN_GAP = 1.0 / RPS
+_rl_lock = threading.Lock()
+_last_req = [0.0]
+def _rate_limit():
+    # разносит запросы во времени, чтобы не превышать лимит провайдера (QuickNode 15 rps и т.п.) и не ловить 429
+    with _rl_lock:
+        now = time.time()
+        wait = _last_req[0] + _MIN_GAP - now
+        if wait > 0:
+            time.sleep(wait)
+        _last_req[0] = time.time()
+
+
 def _post(payload, _tries=5):
     """POST с ретраями и бэкоффом при rate-limit/сбое: один отбитый запрос
     во время нагрузки не должен ронять весь скан."""
     last = None
     for a in range(_tries):
+        _rate_limit()
         req = urllib.request.Request(RPC, data=json.dumps(payload).encode(),
                                      headers={"content-type": "application/json", "User-Agent": "Mozilla/5.0 DIPLAB"})
         try:
