@@ -15,7 +15,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as _CFTimeout
 import chain as ch
 
-WINDOW = 3_000_000
+WINDOW = 1_000_000
 MIN_POSITIONS = 5
 BUNDLE_ALERT_PCT = 10.0
 GROUP_WIDTH = 1.25
@@ -24,8 +24,8 @@ MAX_TRADES = 40      # последних сделок на кошелёк — �
 TARGET_READABLE = 6
 MIN_READABLE_FOR_SCORE = 3   # меньше стольких прочитанных китов -> НЕ выставляем скор (тонкий рид = "no read", не ложное CLEAN)  # добираем холдеров, пока не наберём столько читаемых
 MAX_SCAN = 12        # но не сканируем больше стольких холдеров
-SCAN_BUDGET = 40     # жёсткий потолок времени (сек) на всё чтение китов
-PHASE2_BUDGET = 28   # из них максимум столько на топ-10 (gate свежести)
+SCAN_BUDGET = 50     # жёсткий потолок времени (сек) на всё чтение китов
+PHASE2_BUDGET = 40   # из них максимум столько на топ-10 (gate свежести)
 WORKERS = 20
 FRESH_MAX_TOKENS = 3     # wallet that has ever traded <=3 distinct coins counts as "fresh"
 DANGER_SCORE = 5         # score for withheld / not-analysable tokens (bundled or sybil cluster)
