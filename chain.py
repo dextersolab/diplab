@@ -54,7 +54,7 @@ def _post(payload, _tries=5):
     last = None
     for a in range(_tries):
         req = urllib.request.Request(RPC, data=json.dumps(payload).encode(),
-                                     headers={"content-type": "application/json"})
+                                     headers={"content-type": "application/json", "User-Agent": "Mozilla/5.0 DIPLAB"})
         try:
             with urllib.request.urlopen(req, timeout=40) as r:
                 body = json.loads(r.read())
