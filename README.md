@@ -37,7 +37,7 @@ Then it projects that habit onto the token in front of you.
 
 The result is a map of walls: the price levels where holders are likely to
 sell, how much supply sits behind each, how deep the dip under it runs, and a
-single exit-risk score for the token.
+single exit-risk score for the token
 
 ```
 SWARM / WETH   ·   migrated V4 pool   ·   bundled supply 9.51%   ·   EXIT-RISK 76 / OK
