@@ -21,7 +21,7 @@ so you see the best spots to enter, accumulate and exit.
 Every scanner shows you *how much* a token's whales hold. None of them tell you
 *what they are about to do with it.* You are not losing to the rug you bought -
 you are losing to the whale who already knew his exit while you were still
-reading the chart.
+reading the chart...
 
 DIPLAB answers one question: **where does this chart go next, and where do the
 people holding it get out?**
