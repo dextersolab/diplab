@@ -61,34 +61,42 @@ _HABIT_TTL = 3600
 
 def _pool_state(bn, token, lblock):
     """(sqrtPriceX96, L, token_is_currency0) для мигрировавшего пула.
-    Сторона токена детерминированно: currency0 < currency1 по адресу (пара token/WETH)."""
-    token_is_0 = int(token, 16) < int(WETH_ADDR, 16)
+    Сторона токена — по свопу, чья нога совпадает с переводом токена: пул Pons V2
+    бывает в паре с нативным ETH (currency0 = 0x0, токен всегда currency1), с USDG
+    или с другим токеном, так что сравнение адреса с WETH сторону не определяет."""
     for lg in ch.get_logs(bn - 4000, bn, address=token)[::-1]:
         if not ch.parse_transfer(lg):
+            continue
+        amt = int(lg["data"], 16)
+        if amt <= 0:
             continue
         rc = ch.rpc("eth_getTransactionReceipt", [lg["transactionHash"]])
         for l in rc["logs"]:
             if (l["address"].lower() == ch.V4_POOL_MGR and l.get("topics")
                     and l["topics"][0].lower() == ch.V4_SWAP_TOPIC):
                 d = l["data"]
-                return ch.u256(d, 2), ch.u256(d, 3), token_is_0
+                for token_is_0, side in ((True, abs(_signed(ch.u256(d, 0)))),
+                                         (False, abs(_signed(ch.u256(d, 1))))):
+                    if side > 0 and abs(side - amt) / amt < 0.06:
+                        return ch.u256(d, 2), ch.u256(d, 3), token_is_0
     return None, None, None
 
 
 def _dip(sqrtP, L, token_is_0, dy_raw):
     """Механическая глубина: продажа dy токенов в пул -> доля падения цены.
     Нижняя граница (чистая AMM-механика); паника на рынке углубляет."""
-    if not L or L <= 0:
+    if not L or L <= 0 or not sqrtP:
         return None
     if token_is_0:
+        # продажа currency0: sqrtP падает, 1/sqrtP' = 1/sqrtP + dx/L; цена токена = P
         denom = L + dy_raw * sqrtP // Q96
         sp2 = L * sqrtP // denom if denom > 0 else 0
+        r = (sp2 / sqrtP) ** 2
     else:
-        sp2 = sqrtP - dy_raw * Q96 // L
-    if sp2 <= 0:
-        return 0.99
-    r = (sp2 / sqrtP) ** 2
-    return max(0.0, min(0.99, 1 - (1 / r if token_is_0 else r)))
+        # продажа currency1: sqrtP растёт, sqrtP' = sqrtP + dy/L; цена токена = 1/P
+        sp2 = sqrtP + dy_raw * Q96 // L
+        r = (sqrtP / sp2) ** 2
+    return max(0.0, min(0.99, 1 - r))
 
 
 @dataclass
