@@ -226,12 +226,20 @@ def _habit_compute(bn, holder, skip_token):
     # холдера тут пусто -> запрос возвращается мгновенно (одним вызовом). Прежняя
     # попытка читать "хвостом" на пустой кривой расширяла окно и делала десятки
     # пустых get_logs на каждого холдера -> сотни лишних запросов и тормоза. ---
+    # a log whose buyer/seller and recipient are both the wallet matches both roles: count it once
+    seen_logs = set()
     for role in ([ch.CURVE_BUY, wt], [ch.CURVE_BUY, None, wt]):
         for lg in ch.get_logs(frm, bn, topics=role):
+            if (lg["transactionHash"], lg["logIndex"]) in seen_logs:
+                continue
+            seen_logs.add((lg["transactionHash"], lg["logIndex"]))
             d = lg["data"]; k = ("c", lg["address"].lower())
             pos[k]["qi"] += ch.u256(d, 0); pos[k]["to"] += ch.u256(d, 1)
     for role in ([ch.CURVE_SELL, wt], [ch.CURVE_SELL, None, wt]):
         for lg in ch.get_logs(frm, bn, topics=role):
+            if (lg["transactionHash"], lg["logIndex"]) in seen_logs:
+                continue
+            seen_logs.add((lg["transactionHash"], lg["logIndex"]))
             d = lg["data"]; k = ("c", lg["address"].lower())
             pos[k]["ti"] += ch.u256(d, 0); pos[k]["qo"] += ch.u256(d, 1)
     # --- V4: последние MAX_TRADES переводов, чеки одним батчем ---
